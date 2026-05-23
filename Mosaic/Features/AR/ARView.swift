@@ -38,6 +38,7 @@ struct ARView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CameraFilterStrip(selection: $filter)
+                .padding(.horizontal, 28)
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
@@ -51,7 +52,6 @@ struct ARView: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .tint(.white)
             }
             if filter != .none {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -62,8 +62,11 @@ struct ARView: View {
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
-                    .tint(.white)
                 }
+                // iOS 26 fixed spacer separates the reset and help
+                // items into their own Liquid Glass capsules instead
+                // of merging them into one combined pill.
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -72,7 +75,6 @@ struct ARView: View {
                 } label: {
                     Image(systemName: "questionmark")
                 }
-                .tint(.white)
             }
         }
         .onAppear {

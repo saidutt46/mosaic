@@ -21,21 +21,6 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    launchButton
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: MosaicSpacing.sm,
-                                                  leading: 0,
-                                                  bottom: MosaicSpacing.sm,
-                                                  trailing: 0))
-                    if let reason = device.unsupportedReason {
-                        Label(reason, systemImage: "exclamationmark.triangle.fill")
-                            .font(MosaicFont.footnote)
-                            .foregroundStyle(.orange)
-                            .listRowBackground(Color.clear)
-                    }
-                }
-
                 Section("Device") {
                     infoRow("Model", device.modelIdentifier, icon: "iphone")
                     infoRow("System", "\(device.systemName) \(device.systemVersion)", icon: "apple.logo")
@@ -90,42 +75,43 @@ struct HomeView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                launchBar
+            }
         }
     }
 
-    // MARK: - Hero button
+    // MARK: - Launch bar (bottom-pinned)
 
-    private var launchButton: some View {
-        let supported = device.canRunMosaic
-        return NavigationLink(value: HomeRoute.ar) {
-            HStack(spacing: MosaicSpacing.md) {
-                Image(systemName: "viewfinder")
-                    .font(.title2.weight(.semibold))
-                VStack(alignment: .leading, spacing: MosaicSpacing.xxs) {
+    private var launchBar: some View {
+        VStack(spacing: MosaicSpacing.xs) {
+            NavigationLink(value: HomeRoute.ar) {
+                HStack(spacing: MosaicSpacing.sm) {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 18, weight: .semibold))
                     Text("Launch AR")
-                        .font(MosaicFont.headline)
-                    Text(supported ? "Scene reconstruction ready" : "Device not supported")
-                        .font(MosaicFont.caption)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .font(.system(size: 17, weight: .semibold))
                 }
-                Spacer()
-                Image(systemName: "arrow.right")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, MosaicSpacing.md)
             }
-            .padding(MosaicSpacing.lg)
-            .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    colors: supported
-                        ? [MosaicColor.hudCyan, MosaicColor.accent]
-                        : [Color.gray, Color.gray.opacity(0.7)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: MosaicRadius.lg, style: .continuous)
-            )
-            .foregroundStyle(.white)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .buttonBorderShape(.capsule)
+            .disabled(!device.canRunMosaic)
+
+            if let reason = device.unsupportedReason {
+                Text(reason)
+                    .font(MosaicFont.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, MosaicSpacing.sm)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(!supported)
+        .padding(.horizontal, MosaicSpacing.lg)
+        .padding(.top, MosaicSpacing.md)
+        .padding(.bottom, MosaicSpacing.sm)
+        .background(.bar)
     }
 
     // MARK: - Row helpers
