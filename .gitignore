@@ -1,0 +1,34 @@
+## macOS
+.DS_Store
+
+## Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+## Build products
+build/
+DerivedData/
+*.o
+*.a
+*.dSYM/
+*.ipa
+*.xcarchive
+
+## Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+## CocoaPods (not used, but guard anyway)
+Pods/
+
+## fastlane / misc
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+## Misc
+*.swp
+*~.nib
