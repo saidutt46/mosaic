@@ -183,3 +183,42 @@ fragment float4 cameraFragmentColorSwap(CameraVertexOut in [[stage_in]],
 
     return float4(result, 1.0);
 }
+
+// MARK: - Filter 4 · posterize (quantize each channel)
+//
+// "Posterize" reduces a smooth colour gradient into a small number
+// of flat bands per channel — gives a screen-printed / cel-shaded
+// look (think: classic Warhol screenprints, comic-book shading).
+//
+// The math is just rounding. For each channel we:
+//   1. Scale up by the number of desired levels:    x * N
+//   2. Floor (drop the fractional part):            floor(...)
+//   3. Scale back down so the result stays in 0..1: ... / (N - 1)
+//
+// With N = 4 levels per channel, each of R/G/B can only be
+// {0, 0.33, 0.67, 1.0} — so the whole image only has
+// 4 × 4 × 4 = 64 possible colours. Smooth gradients collapse into
+// visible stair-steps.
+//
+// Vector ops apply per-component automatically in Metal — `floor(rgb)`
+// floors all three channels in a single instruction. No loop needed.
+//
+// New intrinsic: `floor(x)` — drops the fractional part of a value.
+// On a vector, it operates per-channel.
+fragment float4 cameraFragmentPosterize(CameraVertexOut in [[stage_in]],
+                                         texture2d<float> luma   [[texture(0)]],
+                                         texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+
+    // Number of discrete brightness levels per channel. 4 gives a
+    // bold posterized look; 8 is subtler; 2 produces a stark
+    // 2-bit-per-channel "8-colour" palette.
+    constexpr float levels = 4.0;
+
+    // Quantize: scale up, floor, scale back to 0..1.
+    // Dividing by (levels - 1) lets the bands reach 0 AND 1 cleanly
+    // (otherwise the brightest band would only reach (N-1)/N).
+    float3 posterized = floor(rgb * levels) / (levels - 1.0);
+
+    return float4(posterized, 1.0);
+}
