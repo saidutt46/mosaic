@@ -22,9 +22,10 @@ struct ARSceneView: UIViewRepresentable {
         view.rendersContinuously = true
         // ARKit doesn't provide a built-in scene-mesh wireframe debug option.
         // Phase 5 verifies classification via logs; Phase 6 will render the
-        // mesh in Metal. Feature points are useful for spotting tracking gaps.
-        view.debugOptions = [ARSCNDebugOptions.showFeaturePoints,
-                             ARSCNDebugOptions.showWorldOrigin]
+        // mesh in Metal. Feature points stay for tracking visibility; world
+        // origin axis is dropped (coaching overlay + classification logs are
+        // a cleaner signal that tracking is healthy).
+        view.debugOptions = [ARSCNDebugOptions.showFeaturePoints]
         view.scene = SCNScene()
         return view
     }

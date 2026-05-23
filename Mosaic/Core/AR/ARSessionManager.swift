@@ -26,6 +26,11 @@ final class ARSessionManager: NSObject {
     private(set) var trackingState: ARCamera.TrackingState = .notAvailable
     private(set) var isRunning: Bool = false
 
+    /// True while ARCoachingOverlayView owns the screen. We suppress
+    /// our own tracking-state chips during this window to avoid
+    /// double-messaging the user.
+    private(set) var coachingActive: Bool = false
+
     /// AR-scoped message bus — set by the hosting view before `start()`.
     weak var messages: ARMessages?
 
@@ -61,10 +66,16 @@ final class ARSessionManager: NSObject {
         isRunning = true
         Log.ar.info("ARSession started · meshWithClassification")
 
-        messages?.show("Move your device slowly to scan the space",
-                       kind: .guidance, placement: .center, lifetime: .auto(4))
+        // No welcome message — ARCoachingOverlayView (mounted by the
+        // hosting view) handles the cold-start guidance natively.
 
         startSummaryLoop()
+    }
+
+    /// Called by ARCoachingOverlay when Apple's onboarding UI shows
+    /// or hides. While active we suppress our own tracking chips.
+    func setCoachingActive(_ active: Bool) {
+        coachingActive = active
     }
 
     func stop() {
@@ -102,13 +113,20 @@ final class ARSessionManager: NSObject {
             Log.ar.info("tracking: normal")
         case .notAvailable:
             Log.ar.warning("tracking: not available")
-            messages?.show("Tracking not available",
-                           kind: .warning, source: "ar.tracking")
+            if !coachingActive {
+                messages?.show("Tracking not available",
+                               kind: .warning, source: "ar.tracking")
+            }
         case .limited(let reason):
             let label = Self.label(reason)
             Log.ar.warning("tracking limited: \(label, privacy: .public)")
-            messages?.show("Tracking limited — \(label)",
-                           kind: .warning, lifetime: .auto(3), source: "ar.tracking")
+            // .initializing and .relocalizing are owned by the
+            // coaching overlay — don't duplicate them in chips.
+            let coveredByCoaching = (reason == .initializing || reason == .relocalizing)
+            if !coachingActive && !coveredByCoaching {
+                messages?.show("Tracking limited — \(label)",
+                               kind: .warning, lifetime: .auto(3), source: "ar.tracking")
+            }
         }
     }
 

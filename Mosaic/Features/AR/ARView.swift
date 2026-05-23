@@ -19,6 +19,12 @@ struct ARView: View {
             ARSceneView(session: sessionManager.session)
                 .ignoresSafeArea()
 
+            ARCoachingOverlay(
+                session: sessionManager.session,
+                onActiveChange: { sessionManager.setCoachingActive($0) }
+            )
+            .ignoresSafeArea()
+
             ARMessageOverlay()
                 .environment(messages)
 
