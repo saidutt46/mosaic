@@ -15,25 +15,30 @@ struct ARMessageOverlay: View {
 
     var body: some View {
         ZStack {
-            // Center slot
-            if let msg = messages.center {
-                centerCard(msg)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .transition(.scale(scale: 0.92).combined(with: .opacity))
+            // Bottom-slot chip — now rendered at the vertical center
+            // of the AR view; the chip styling (no background, white
+            // text + double shadow) is unchanged.
+            if let msg = messages.bottom {
+                bottomChip(msg)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                        removal: .opacity
+                    ))
             }
 
-            // Bottom slot
-            if let msg = messages.bottom {
-                VStack {
-                    Spacer()
-                    bottomChip(msg)
-                        .padding(.bottom, MosaicSpacing.xxl)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Center slot — bigger glass card for big-moment guidance.
+            // Drawn after the chip so it overlays if both are visible.
+            if let msg = messages.center {
+                centerCard(msg)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.92)),
+                        removal: .opacity
+                    ))
             }
         }
-        .animation(MosaicMotion.snappy, value: messages.bottom?.id)
-        .animation(MosaicMotion.smooth, value: messages.center?.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.smooth(duration: 0.35), value: messages.bottom?.id)
+        .animation(.smooth(duration: 0.35), value: messages.center?.id)
         .environment(\.colorScheme, .dark)
         .allowsHitTesting(messages.bottom != nil || messages.center != nil)
     }
@@ -44,14 +49,14 @@ struct ARMessageOverlay: View {
     // shadow so legibility holds over any backdrop. Centered.
 
     private func bottomChip(_ msg: ARMessages.Message) -> some View {
-        HStack(spacing: MosaicSpacing.sm) {
+        VStack(spacing: MosaicSpacing.sm) {
             if let icon = msg.icon {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(msg.kind.accent)
             }
             Text(msg.text)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
             if case .sticky = msg.lifetime {
@@ -59,15 +64,15 @@ struct ARMessageOverlay: View {
                     messages.dismiss(msg.id)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.85))
                 }
                 .buttonStyle(.plain)
-                .padding(.leading, MosaicSpacing.xs)
+                .padding(.top, MosaicSpacing.xs)
             }
         }
         .padding(.horizontal, MosaicSpacing.xl)
-        .frame(maxWidth: 360)
+        .frame(maxWidth: 320)
         .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
         .shadow(color: .black.opacity(0.45), radius: 10, x: 0, y: 2)
     }

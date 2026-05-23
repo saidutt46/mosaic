@@ -53,17 +53,19 @@ struct ARView: View {
                 }
                 .tint(.white)
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if filter != .none {
+            if filter != .none {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         withAnimation(MosaicMotion.snappy) {
                             filter = .none
                         }
                     } label: {
-                        Image(systemName: "xmark.circle")
+                        Image(systemName: "arrow.counterclockwise")
                     }
                     .tint(.white)
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     // TODO: AR help / quick-settings panel.
                     Log.ui.debug("AR help button tapped (no-op)")

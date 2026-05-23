@@ -19,16 +19,27 @@ struct CameraFilterStrip: View {
     private let chipSize = CGSize(width: 64, height: 60)
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: MosaicSpacing.sm) {
-                ForEach(CameraFilter.allCases) { filter in
-                    chip(filter)
+        // Outer HStack constrains the glass pill so the 16pt screen
+        // margin actually takes effect — `.glassEffect` applied
+        // directly to a ScrollView ignores horizontal padding.
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: MosaicSpacing.sm) {
+                    ForEach(CameraFilter.allCases) { filter in
+                        chip(filter)
+                    }
                 }
+                .padding(.horizontal, MosaicSpacing.md)
+                .padding(.vertical, MosaicSpacing.sm)
             }
-            .padding(.horizontal, MosaicSpacing.lg)
-            .padding(.vertical, MosaicSpacing.md)
+            .scrollIndicators(.hidden)
+            .glassEffect(
+                .regular,
+                in: RoundedRectangle(cornerRadius: MosaicRadius.xl, style: .continuous)
+            )
         }
-        .scrollIndicators(.hidden)
+        .padding(.horizontal, MosaicSpacing.lg)  // 16pt screen margin
+        .padding(.bottom, MosaicSpacing.sm)
         .environment(\.colorScheme, .dark)
     }
 
