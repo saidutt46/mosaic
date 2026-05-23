@@ -100,3 +100,27 @@ fragment float4 cameraFragmentTint(CameraVertexOut in [[stage_in]],
     constexpr float3 tint = float3(1.10, 0.70, 0.70);  // warm pink
     return float4(rgb * tint, 1.0);
 }
+
+// MARK: - Filter 2 · monochrome (B&W)
+//
+// Collapse the RGB triple to a single perceptual brightness value
+// using BT.601 luma weights, then put that value back into all
+// three channels. The result is a "perceptual" grayscale — the eye
+// sees green far more strongly than blue, so weighted mixing looks
+// far more natural than a flat (r+g+b)/3 average (which makes
+// blues unnaturally bright and reds dark).
+//
+//   gray = 0.299·R + 0.587·G + 0.114·B
+//
+// `dot(a, b)` is the GPU intrinsic for weighted sum — one
+// multiply-add unit returns the same result as writing it out by
+// hand, but the hardware loves it. We'll reuse `dot` constantly
+// (vignette, edge detect, lighting).
+fragment float4 cameraFragmentMonochrome(CameraVertexOut in [[stage_in]],
+                                          texture2d<float> luma   [[texture(0)]],
+                                          texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+    constexpr float3 lumaWeights = float3(0.299, 0.587, 0.114);  // BT.601
+    float gray = dot(rgb, lumaWeights);
+    return float4(gray, gray, gray, 1.0);
+}
