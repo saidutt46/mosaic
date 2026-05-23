@@ -124,3 +124,62 @@ fragment float4 cameraFragmentMonochrome(CameraVertexOut in [[stage_in]],
     float gray = dot(rgb, lumaWeights);
     return float4(gray, gray, gray, 1.0);
 }
+
+// MARK: - Filter 3 · color swap (yellow → pink, black → red)
+//
+// First filter where we actually look at WHAT colour a pixel is and
+// react to it. The classic "swap one colour for another" shader.
+//
+// Approach: for each target colour, compute the pixel's distance
+// to that colour in RGB space, smoothstep it into a 0..1 "match
+// weight", and mix() the replacement colour over the original by
+// that weight.
+//
+// The hard-branch version would be:
+//     if (distance(rgb, yellow) < tolerance) return float4(pink, 1);
+// That works but produces ugly hard edges where colours straddle
+// the threshold. Smoothstep + mix gives a soft, photographic
+// transition — and it runs faster on the GPU (no branch divergence).
+//
+// New intrinsics this filter teaches:
+//   distance(a, b)        — Euclidean distance between two vectors.
+//   smoothstep(e0, e1, x) — smooth S-curve from 0 at e0 to 1 at e1.
+//   mix(a, b, t)          — linear interpolate: a*(1-t) + b*t.
+//
+// Tune `tolerance` to widen / narrow the match. Crank it up and
+// almost everything becomes pink/red; drop it and only near-perfect
+// matches change.
+fragment float4 cameraFragmentColorSwap(CameraVertexOut in [[stage_in]],
+                                         texture2d<float> luma   [[texture(0)]],
+                                         texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+
+    // Targets and their replacements.
+    constexpr float3 yellow = float3(1.0, 1.0, 0.0);
+    constexpr float3 pink   = float3(1.0, 0.40, 0.70);
+    constexpr float3 black  = float3(0.0, 0.0, 0.0);
+    constexpr float3 red    = float3(1.0, 0.0, 0.0);
+
+    // How close (in RGB-space distance) a pixel must be to count.
+    constexpr float tolerance = 0.40;
+
+    // Distance from this pixel to each target. 0 = exact match;
+    // ~1.73 = farthest possible distance (corner to corner of the
+    // unit RGB cube).
+    float dYellow = distance(rgb, yellow);
+    float dBlack  = distance(rgb, black);
+
+    // 1.0 - smoothstep(0, tolerance, distance) inverts so close ⇒
+    // weight 1 and far ⇒ weight 0, with a smooth roll-off in between.
+    float wYellow = 1.0 - smoothstep(0.0, tolerance, dYellow);
+    float wBlack  = 1.0 - smoothstep(0.0, tolerance, dBlack);
+
+    // Layer the swaps over the original. Order doesn't really
+    // matter here because the two target colours are far apart
+    // (a pixel can't be both near-yellow and near-black).
+    float3 result = rgb;
+    result = mix(result, pink, wYellow);
+    result = mix(result, red,  wBlack);
+
+    return float4(result, 1.0);
+}
