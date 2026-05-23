@@ -3,10 +3,10 @@
 //  Mosaic
 //
 //  The AR experience root. Owns the ARSessionManager + ARMessages bus
-//  for this presentation. Renders the live ARSCNView underneath the
-//  coaching overlay and the AR message overlay. Chrome is a native
-//  iOS 26 toolbar with Liquid Glass buttons (leading close + trailing
-//  help) floating over the scene.
+//  for this presentation. Renders the live ARKit camera feed via our
+//  own Metal pipeline (ARMetalViewRepresentable → Renderer), with the
+//  coaching overlay and message overlay layered above, plus a native
+//  iOS 26 toolbar (leading close + trailing help) floating over.
 //
 
 import SwiftUI
@@ -14,17 +14,13 @@ import os
 
 struct ARView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppSettings.self) private var settings
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
 
     var body: some View {
         ZStack {
-            ARSceneView(
-                session: sessionManager.session,
-                showDebug: settings.showDebugOverlay
-            )
-            .ignoresSafeArea()
+            ARMetalViewRepresentable(session: sessionManager.session)
+                .ignoresSafeArea()
 
             ARCoachingOverlay(
                 session: sessionManager.session,
