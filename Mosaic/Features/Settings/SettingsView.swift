@@ -24,7 +24,7 @@ struct SettingsView: View {
                 } label: {
                     Label("Theme", systemImage: "paintbrush")
                 }
-                .pickerStyle(.navigationLink)
+                .pickerStyle(.menu)
             } header: {
                 Text("Appearance")
             }
@@ -33,10 +33,17 @@ struct SettingsView: View {
                 Toggle(isOn: $settings.showDebugOverlay) {
                     Label("Show debug overlay", systemImage: "gauge.with.dots.needle.67percent")
                 }
+                NavigationLink {
+                    DesignGallery()
+                        .navigationTitle("Design Gallery")
+                        .navigationBarTitleDisplayMode(.inline)
+                } label: {
+                    Label("Design Gallery", systemImage: "paintpalette")
+                }
             } header: {
                 Text("Debug")
             } footer: {
-                Text("Displays FPS, anchor count, and triangle count over the AR view.")
+                Text("Debug overlay displays FPS, anchor count, and triangle count over the AR view.")
             }
 
             Section {
