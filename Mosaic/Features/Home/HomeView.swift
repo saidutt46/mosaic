@@ -78,7 +78,7 @@ struct HomeView: View {
             .navigationTitle("Mosaic")
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
-                case .ar: ARPlaceholderView()
+                case .ar: ARView()
                 }
             }
             .toolbar {
