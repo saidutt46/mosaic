@@ -2,11 +2,12 @@
 //  ARView.swift
 //  Mosaic
 //
-//  The AR experience root. Owns the ARSessionManager + ARMessages bus
-//  for this presentation. Renders the live ARKit camera feed via our
-//  own Metal pipeline (ARMetalViewRepresentable → Renderer), with the
-//  coaching overlay and message overlay layered above, plus a native
-//  iOS 26 toolbar (leading close + trailing help) floating over.
+//  The AR experience root. Owns the ARSessionManager + ARMessages
+//  bus + active CameraFilter for this presentation. Renders the
+//  live camera through our Metal pipeline, with coaching + message
+//  overlays layered above, a native iOS 26 toolbar floating over
+//  the top (leading close, trailing help + conditional clear), and
+//  the filter strip pinned to the bottom safe area.
 //
 
 import SwiftUI
@@ -16,11 +17,15 @@ struct ARView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
+    @State private var filter: CameraFilter = .none
 
     var body: some View {
         ZStack {
-            ARMetalViewRepresentable(session: sessionManager.session)
-                .ignoresSafeArea()
+            ARMetalViewRepresentable(
+                session: sessionManager.session,
+                filter: filter
+            )
+            .ignoresSafeArea()
 
             ARCoachingOverlay(
                 session: sessionManager.session,
@@ -30,6 +35,9 @@ struct ARView: View {
 
             ARMessageOverlay()
                 .environment(messages)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CameraFilterStrip(selection: $filter)
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
@@ -45,7 +53,17 @@ struct ARView: View {
                 }
                 .tint(.white)
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if filter != .none {
+                    Button {
+                        withAnimation(MosaicMotion.snappy) {
+                            filter = .none
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .tint(.white)
+                }
                 Button {
                     // TODO: AR help / quick-settings panel.
                     Log.ui.debug("AR help button tapped (no-op)")

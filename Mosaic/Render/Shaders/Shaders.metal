@@ -64,11 +64,39 @@ constexpr sampler cameraSampler(mag_filter::linear,
                                  s_address::clamp_to_edge,
                                  t_address::clamp_to_edge);
 
+// MARK: - Sample camera RGB
+//
+// Helper used by every filter fragment. Returns a clean linear RGB
+// pixel for the current screen position. Each filter does whatever
+// it wants with that pixel and returns the final color.
+static inline float3 sampleCameraRGB(float2 uv,
+                                     texture2d<float> luma,
+                                     texture2d<float> chroma) {
+    float4 ycbcr = float4(luma.sample(cameraSampler, uv).r,
+                          chroma.sample(cameraSampler, uv).rg,
+                          1.0);
+    return (ycbcrToRGB * ycbcr).rgb;
+}
+
+// MARK: - Filter 0 · pass-through (Original)
 fragment float4 cameraFragment(CameraVertexOut in [[stage_in]],
                                 texture2d<float> luma   [[texture(0)]],
                                 texture2d<float> chroma [[texture(1)]]) {
-    float4 ycbcr = float4(luma.sample(cameraSampler, in.texCoord).r,
-                          chroma.sample(cameraSampler, in.texCoord).rg,
-                          1.0);
-    return ycbcrToRGB * ycbcr;
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+    return float4(rgb, 1.0);
+}
+
+// MARK: - Filter 1 · warm tint
+//
+// Multiplies the camera color by a warm tint (full red, dimmed
+// green/blue). The whole image takes on a pinkish/red wash, like
+// an Instagram "warm" filter. The simplest possible per-pixel
+// effect — illustrates that fragments run independently per pixel
+// and that we can do plain arithmetic on the (r, g, b) triple.
+fragment float4 cameraFragmentTint(CameraVertexOut in [[stage_in]],
+                                    texture2d<float> luma   [[texture(0)]],
+                                    texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+    constexpr float3 tint = float3(1.10, 0.70, 0.70);  // warm pink
+    return float4(rgb * tint, 1.0);
 }

@@ -54,6 +54,12 @@ final class Renderer: NSObject, MTKViewDelegate {
         viewportSize = size
     }
 
+    // MARK: - Filter
+
+    func setFilter(_ filter: CameraFilter) {
+        cameraBackgroundPass.setFilter(filter)
+    }
+
     func draw(in view: MTKView) {
         guard let frame = session?.currentFrame,
               let drawable = view.currentDrawable,
