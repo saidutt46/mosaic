@@ -3,11 +3,17 @@
 //  Mosaic
 //
 //  The AR experience root. Owns the ARSessionManager + ARMessages
-//  bus + active CameraFilter for this presentation. Renders the
-//  live camera through our Metal pipeline, with coaching + message
-//  overlays layered above, a native iOS 26 toolbar floating over
-//  the top (leading close, trailing help + conditional clear), and
-//  the filter strip pinned to the bottom safe area.
+//  bus + active CameraFilter + capture trigger for this presentation.
+//  Renders the live camera through the Metal pipeline with coaching
+//  + message overlays layered above.
+//
+//  Chrome:
+//   - Toolbar leading:  close (X)
+//   - Toolbar trailing: capture · flip (if supported) · reset (if filter)
+//                       · help
+//     iOS 26 ToolbarSpacer(.fixed) separates each into its own
+//     Liquid Glass pill instead of merging.
+//   - Bottom safe-area: CameraFilterStrip (Track A filter pickers).
 //
 
 import SwiftUI
@@ -19,6 +25,7 @@ struct ARView: View {
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
     @State private var filter: CameraFilter = .none
+    @State private var captureTrigger: Int = 0
 
     /// Snapshot at view init — face tracking support doesn't change
     /// at runtime, so hide the flip button entirely on devices that
@@ -29,7 +36,9 @@ struct ARView: View {
         ZStack {
             ARMetalViewRepresentable(
                 session: sessionManager.session,
-                filter: filter
+                filter: filter,
+                captureTrigger: captureTrigger,
+                onCapture: handleCapture
             )
             .ignoresSafeArea()
 
@@ -59,21 +68,16 @@ struct ARView: View {
                     Image(systemName: "xmark")
                 }
             }
-            if filter != .none {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        withAnimation(MosaicMotion.snappy) {
-                            filter = .none
-                        }
-                    } label: {
-                        Image(systemName: "arrow.counterclockwise")
-                    }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    captureTrigger &+= 1
+                } label: {
+                    Image(systemName: "camera.fill")
                 }
-                // iOS 26 fixed spacer separates the reset and help
-                // items into their own Liquid Glass capsules instead
-                // of merging them into one combined pill.
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
             if isFrontCameraSupported {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -86,6 +90,20 @@ struct ARView: View {
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
+
+            if filter != .none {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        withAnimation(MosaicMotion.snappy) {
+                            filter = .none
+                        }
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            }
+
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     // TODO: AR help / quick-settings panel.
@@ -102,6 +120,30 @@ struct ARView: View {
         .onDisappear {
             sessionManager.stop()
             messages.clearAll()
+        }
+    }
+
+    // MARK: - Capture handling
+
+    @MainActor
+    private func handleCapture(_ image: UIImage?) {
+        guard let image else {
+            messages.show("Capture failed", kind: .error)
+            return
+        }
+        PhotoCapture.save(image) { result in
+            switch result {
+            case .success:
+                messages.show("Saved to Photos",
+                              kind: .success,
+                              icon: "photo.badge.checkmark")
+            case .failure(.notAuthorized):
+                messages.show("Photos access denied",
+                              kind: .warning,
+                              lifetime: .auto(4))
+            case .failure(.underlying):
+                messages.show("Couldn't save photo", kind: .error)
+            }
         }
     }
 }
