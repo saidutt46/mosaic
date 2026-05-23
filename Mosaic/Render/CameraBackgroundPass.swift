@@ -80,11 +80,14 @@ final class CameraBackgroundPass {
         self.lumaTexture = luma
         self.chromaTexture = chroma
 
-        // ARFrame.displayTransform returns a CGAffineTransform that
-        // maps UV (image-space) to view-space for the given
-        // orientation + size. We hoist it into a column-major float3x3
-        // so the vertex shader can apply it directly.
-        let dt = frame.displayTransform(for: orientation, viewportSize: viewportSize)
+        // ARFrame.displayTransform maps IMAGE UV → VIEWPORT UV. In the
+        // vertex shader we go the other way (we know the viewport
+        // vertex, we want to know which image UV to sample), so we
+        // pass the INVERSE. Without this the image is rotated wrong
+        // and the unmapped strips at top/bottom sample garbage.
+        let dt = frame.displayTransform(
+            for: orientation, viewportSize: viewportSize
+        ).inverted()
         var transform = simd_float3x3(
             SIMD3<Float>(Float(dt.a),  Float(dt.b),  0),
             SIMD3<Float>(Float(dt.c),  Float(dt.d),  0),
