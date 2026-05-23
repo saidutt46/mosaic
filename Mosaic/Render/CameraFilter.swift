@@ -78,11 +78,5 @@ enum CameraFilter: String, CaseIterable, Identifiable, Sendable {
 
     /// True once the Metal fragment for this case is implemented.
     /// Flip to true as each shader lands; the strip chip enables.
-    var isImplemented: Bool {
-        switch self {
-        case .none, .tint, .monochrome, .colorSwap, .posterize,
-             .hueRotate, .vignette, .pixelate, .thermal: true
-        case .edgeDetect:                                false
-        }
-    }
+    var isImplemented: Bool { true }
 }

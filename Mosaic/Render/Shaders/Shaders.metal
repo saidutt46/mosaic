@@ -375,3 +375,79 @@ fragment float4 cameraFragmentThermal(CameraVertexOut in [[stage_in]],
 
     return float4(result, 1.0);
 }
+
+// MARK: - Filter 8 · edge detect (Sobel convolution)
+//
+// The conceptual jump that unlocks everything from here on. Every
+// previous filter computed an output pixel from a SINGLE input
+// pixel. Edge detection looks at a pixel AND its neighbours — the
+// gateway to blur, sharpen, noise reduction, optical flow, most
+// classical CV, and the convolution layers in CNNs.
+//
+// Sobel kernel — two 3×3 weighting matrices applied per pixel:
+//
+//   Horizontal gradient (Gx):    Vertical gradient (Gy):
+//   [ -1   0  +1 ]               [ -1  -2  -1 ]
+//   [ -2   0  +2 ]               [  0   0   0 ]
+//   [ -1   0  +1 ]               [ +1  +2  +1 ]
+//
+// Gx is large where brightness changes left-to-right (vertical
+// edges). Gy is large where brightness changes top-to-bottom
+// (horizontal edges). The magnitude length(Gx, Gy) is "how
+// edge-like is this pixel" regardless of edge direction.
+//
+// We compute Gx and Gy on the luminance of each sample (the eye
+// sees colour edges mostly through brightness), then return the
+// edge magnitude as white-on-black.
+//
+// Implementation notes:
+//   - texelSize is 1.0 / image-resolution, so adding it to a UV
+//     moves exactly one texel. We compute it from the luma
+//     texture's dimensions at runtime.
+//   - 9 samples per pixel × 60 fps × millions of pixels is fine
+//     on modern GPUs — Sobel is the "hello world" of compute
+//     intensity. Bigger kernels (5×5, 7×7) are how blur/sharpen
+//     and convolutional ML layers scale.
+
+static inline float edgeLuma(float2 uv,
+                              texture2d<float> luma,
+                              texture2d<float> chroma) {
+    float3 rgb = sampleCameraRGB(uv, luma, chroma);
+    return dot(rgb, float3(0.299, 0.587, 0.114));
+}
+
+fragment float4 cameraFragmentEdge(CameraVertexOut in [[stage_in]],
+                                    texture2d<float> luma   [[texture(0)]],
+                                    texture2d<float> chroma [[texture(1)]]) {
+    // One-texel step in UV space. The luma plane is full-resolution,
+    // so its width/height drive the step size.
+    float2 texelSize = 1.0 / float2(luma.get_width(), luma.get_height());
+
+    // Sample the 3×3 neighbourhood around this pixel. Labels follow
+    // compass directions for readability.
+    float tl = edgeLuma(in.texCoord + texelSize * float2(-1, -1), luma, chroma);
+    float t  = edgeLuma(in.texCoord + texelSize * float2( 0, -1), luma, chroma);
+    float tr = edgeLuma(in.texCoord + texelSize * float2( 1, -1), luma, chroma);
+    float l  = edgeLuma(in.texCoord + texelSize * float2(-1,  0), luma, chroma);
+    float r  = edgeLuma(in.texCoord + texelSize * float2( 1,  0), luma, chroma);
+    float bl = edgeLuma(in.texCoord + texelSize * float2(-1,  1), luma, chroma);
+    float b  = edgeLuma(in.texCoord + texelSize * float2( 0,  1), luma, chroma);
+    float br = edgeLuma(in.texCoord + texelSize * float2( 1,  1), luma, chroma);
+
+    // Apply the Sobel weights. Centre pixel weights are 0, so we
+    // don't even need to sample it.
+    float gx = (-1.0 * tl) + (1.0 * tr)
+             + (-2.0 * l)  + (2.0 * r)
+             + (-1.0 * bl) + (1.0 * br);
+
+    float gy = (-1.0 * tl) + (-2.0 * t) + (-1.0 * tr)
+             + ( 1.0 * bl) + ( 2.0 * b) + ( 1.0 * br);
+
+    // Edge magnitude — Pythagoras across the two gradients.
+    float edge = length(float2(gx, gy));
+
+    // Sobel output is unbounded; multiply for visibility, clamp to 1.
+    edge = saturate(edge * 1.5);
+
+    return float4(edge, edge, edge, 1.0);
+}
