@@ -222,3 +222,63 @@ fragment float4 cameraFragmentPosterize(CameraVertexOut in [[stage_in]],
 
     return float4(posterized, 1.0);
 }
+
+// MARK: - Filter 5 · hue rotate (RGB → HSV → shift → RGB)
+//
+// First filter that leaves RGB and works in a different colour space.
+//
+// Why bother? In RGB, "shift the hue without touching brightness or
+// saturation" is a nightmare — the three channels are tangled. In
+// HSV the components are SEPARATE:
+//   H (hue)        — position on the colour wheel, 0..1 (0=red,
+//                    0.33=green, 0.67=blue, 1.0=red again)
+//   S (saturation) — colourfulness, 0..1 (0=gray, 1=pure colour)
+//   V (value)      — brightness, 0..1
+//
+// To rotate hue, we just add to H and wrap with fract().
+// To desaturate, we just lower S. To brighten, we just raise V.
+// Each operation is one line.
+//
+// The rgb2hsv / hsv2rgb helpers below are Iñigo Quilez's branchless
+// GLSL conversions — the demoscene standard. They look dense because
+// they use mix() + step() to do the piecewise H/S/V math without
+// any if statements (warp-friendly). You don't need to read them
+// line-by-line; treat them as black-box converters.
+//
+// New intrinsics this filter teaches:
+//   fract(x)   — fractional part of x. Wraps hue back into 0..1.
+//   step(e, x) — 0 if x < e else 1. The branchless "if".
+
+static inline float3 rgb2hsv(float3 c) {
+    float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    float4 p = mix(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+    float4 q = mix(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;  // tiny epsilon to avoid divide-by-zero on pure gray
+    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)),
+                  d / (q.x + e),
+                  q.x);
+}
+
+static inline float3 hsv2rgb(float3 c) {
+    float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    float3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+fragment float4 cameraFragmentHueRotate(CameraVertexOut in [[stage_in]],
+                                         texture2d<float> luma   [[texture(0)]],
+                                         texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+
+    // Convert into HSV, add 1/3 of a turn (120°) to the hue, wrap
+    // with fract() so it stays in 0..1, convert back.
+    //   red    (0.00) → green  (0.33)
+    //   green  (0.33) → blue   (0.67)
+    //   blue   (0.67) → red    (1.00 → wraps to 0)
+    float3 hsv = rgb2hsv(rgb);
+    hsv.x = fract(hsv.x + 0.333);
+    float3 result = hsv2rgb(hsv);
+
+    return float4(result, 1.0);
+}

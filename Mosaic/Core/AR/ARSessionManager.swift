@@ -22,9 +22,14 @@ import os
 @Observable
 final class ARSessionManager: NSObject {
 
+    enum CameraDirection: String, Sendable, CaseIterable {
+        case back, front
+    }
+
     let session = ARSession()
     private(set) var trackingState: ARCamera.TrackingState = .notAvailable
     private(set) var isRunning: Bool = false
+    private(set) var direction: CameraDirection = .back
 
     /// True while ARCoachingOverlayView owns the screen. We suppress
     /// our own tracking-state chips during this window to avoid
@@ -50,29 +55,59 @@ final class ARSessionManager: NSObject {
     // MARK: - Lifecycle
 
     func start() {
-        guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) else {
-            Log.ar.error("scene reconstruction with classification not supported")
-            messages?.show("Device does not support scene reconstruction",
-                           kind: .error, placement: .center, lifetime: .sticky)
-            return
-        }
+        let config: ARConfiguration
+        switch direction {
+        case .back:
+            guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) else {
+                Log.ar.error("scene reconstruction with classification not supported")
+                messages?.show("Device does not support scene reconstruction",
+                               kind: .error, placement: .center, lifetime: .sticky)
+                return
+            }
+            let wt = ARWorldTrackingConfiguration()
+            wt.sceneReconstruction = .meshWithClassification
+            wt.planeDetection = [.horizontal, .vertical]
+            if type(of: wt).supportsFrameSemantics(.sceneDepth) {
+                wt.frameSemantics.insert(.sceneDepth)
+            }
+            wt.environmentTexturing = .none
+            config = wt
 
-        let config = ARWorldTrackingConfiguration()
-        config.sceneReconstruction = .meshWithClassification
-        config.planeDetection = [.horizontal, .vertical]
-        if type(of: config).supportsFrameSemantics(.sceneDepth) {
-            config.frameSemantics.insert(.sceneDepth)
+        case .front:
+            guard ARFaceTrackingConfiguration.isSupported else {
+                Log.ar.error("face tracking (front camera) not supported")
+                messages?.show("Front camera AR not supported on this device",
+                               kind: .error)
+                return
+            }
+            // ARFaceTrackingConfiguration uses the TrueDepth camera
+            // and still publishes ARFrame.capturedImage, so the entire
+            // Metal pipeline keeps working unchanged. Just no world
+            // tracking, no mesh — the filter strip becomes a selfie cam.
+            config = ARFaceTrackingConfiguration()
         }
-        config.environmentTexturing = .none
 
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
         isRunning = true
-        Log.ar.info("ARSession started · meshWithClassification")
+        Log.ar.info("ARSession started · \(self.direction.rawValue, privacy: .public)")
 
         // No welcome message — ARCoachingOverlayView (mounted by the
         // hosting view) handles the cold-start guidance natively.
 
         startSummaryLoop()
+    }
+
+    /// Flip between the back (world-tracking, mesh) and front
+    /// (face-tracking) cameras. Restarts the session under the new
+    /// configuration; the Metal pipeline keeps consuming
+    /// ARFrame.capturedImage unchanged.
+    func switchCamera(to newDirection: CameraDirection) {
+        guard newDirection != direction else { return }
+        Log.ar.info("camera flip → \(newDirection.rawValue, privacy: .public)")
+        let wasRunning = isRunning
+        if wasRunning { stop() }
+        direction = newDirection
+        if wasRunning { start() }
     }
 
     /// Called by ARCoachingOverlay when Apple's onboarding UI shows

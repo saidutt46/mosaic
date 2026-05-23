@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import ARKit
 import os
 
 struct ARView: View {
@@ -18,6 +19,11 @@ struct ARView: View {
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
     @State private var filter: CameraFilter = .none
+
+    /// Snapshot at view init — face tracking support doesn't change
+    /// at runtime, so hide the flip button entirely on devices that
+    /// can't do front-camera AR.
+    private let isFrontCameraSupported = ARFaceTrackingConfiguration.isSupported
 
     var body: some View {
         ZStack {
@@ -66,6 +72,18 @@ struct ARView: View {
                 // iOS 26 fixed spacer separates the reset and help
                 // items into their own Liquid Glass capsules instead
                 // of merging them into one combined pill.
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            }
+            if isFrontCameraSupported {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        let next: ARSessionManager.CameraDirection =
+                            sessionManager.direction == .back ? .front : .back
+                        sessionManager.switchCamera(to: next)
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                    }
+                }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             ToolbarItem(placement: .topBarTrailing) {
