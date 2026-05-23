@@ -4,20 +4,27 @@
 //
 //  The AR experience root. Owns the ARSessionManager + ARMessages bus
 //  for this presentation. Renders the live ARSCNView underneath the
-//  AR message overlay and a minimal glass chrome (close button).
+//  coaching overlay and the AR message overlay. Chrome is a native
+//  iOS 26 toolbar with Liquid Glass buttons (leading close + trailing
+//  help) floating over the scene.
 //
 
 import SwiftUI
+import os
 
 struct ARView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppSettings.self) private var settings
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
 
     var body: some View {
         ZStack {
-            ARSceneView(session: sessionManager.session)
-                .ignoresSafeArea()
+            ARSceneView(
+                session: sessionManager.session,
+                showDebug: settings.showDebugOverlay
+            )
+            .ignoresSafeArea()
 
             ARCoachingOverlay(
                 session: sessionManager.session,
@@ -27,13 +34,31 @@ struct ARView: View {
 
             ARMessageOverlay()
                 .environment(messages)
-
-            chrome
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
         .navigationBarBackButtonHidden()
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .tint(.white)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    // TODO: AR help / quick-settings panel.
+                    Log.ui.debug("AR help button tapped (no-op)")
+                } label: {
+                    Image(systemName: "questionmark")
+                }
+                .tint(.white)
+            }
+        }
         .onAppear {
             sessionManager.messages = messages
             sessionManager.start()
@@ -41,29 +66,6 @@ struct ARView: View {
         .onDisappear {
             sessionManager.stop()
             messages.clearAll()
-        }
-    }
-
-    // MARK: - Chrome
-
-    private var chrome: some View {
-        VStack {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .glassEffect(.regular, in: Circle())
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-            }
-            .padding(MosaicSpacing.lg)
-            Spacer()
         }
     }
 }

@@ -14,21 +14,33 @@ import SceneKit
 
 struct ARSceneView: UIViewRepresentable {
     let session: ARSession
+    var showDebug: Bool
 
     func makeUIView(context: Context) -> ARSCNView {
         let view = ARSCNView(frame: .zero)
         view.session = session
         view.automaticallyUpdatesLighting = true
         view.rendersContinuously = true
-        // ARKit doesn't provide a built-in scene-mesh wireframe debug option.
-        // Phase 5 verifies classification via logs; Phase 6 will render the
-        // mesh in Metal. Feature points stay for tracking visibility; world
-        // origin axis is dropped (coaching overlay + classification logs are
-        // a cleaner signal that tracking is healthy).
-        view.debugOptions = [ARSCNDebugOptions.showFeaturePoints]
         view.scene = SCNScene()
+        view.debugOptions = Self.debugOptions(showDebug: showDebug)
         return view
     }
 
-    func updateUIView(_ uiView: ARSCNView, context: Context) {}
+    func updateUIView(_ uiView: ARSCNView, context: Context) {
+        let options = Self.debugOptions(showDebug: showDebug)
+        if uiView.debugOptions != options {
+            uiView.debugOptions = options
+        }
+    }
+
+    /// Feature points (the yellow tracking sparkles) are always on — they
+    /// give the user real feedback that the camera is finding the scene.
+    /// The world-origin XYZ axis is dev-only; gated by the settings toggle.
+    private static func debugOptions(showDebug: Bool) -> SCNDebugOptions {
+        var options: SCNDebugOptions = [ARSCNDebugOptions.showFeaturePoints]
+        if showDebug {
+            options.insert(ARSCNDebugOptions.showWorldOrigin)
+        }
+        return options
+    }
 }

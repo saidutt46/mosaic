@@ -39,15 +39,19 @@ struct ARMessageOverlay: View {
     }
 
     // MARK: - Bottom chip
+    //
+    // Camera-app style: no background, bold white text, soft double
+    // shadow so legibility holds over any backdrop. Centered.
 
     private func bottomChip(_ msg: ARMessages.Message) -> some View {
         HStack(spacing: MosaicSpacing.sm) {
             if let icon = msg.icon {
                 Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(msg.kind.accent)
             }
             Text(msg.text)
-                .font(MosaicFont.callout)
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
             if case .sticky = msg.lifetime {
@@ -55,16 +59,17 @@ struct ARMessageOverlay: View {
                     messages.dismiss(msg.id)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, MosaicSpacing.xs)
             }
         }
-        .padding(.horizontal, MosaicSpacing.lg)
-        .padding(.vertical, MosaicSpacing.md)
-        .glassEffect(.regular, in: Capsule())
-        .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 4)
+        .padding(.horizontal, MosaicSpacing.xl)
+        .frame(maxWidth: 360)
+        .shadow(color: .black.opacity(0.85), radius: 3, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.45), radius: 10, x: 0, y: 2)
     }
 
     // MARK: - Center card

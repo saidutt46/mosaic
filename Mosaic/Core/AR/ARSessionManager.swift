@@ -31,6 +31,9 @@ final class ARSessionManager: NSObject {
     /// double-messaging the user.
     private(set) var coachingActive: Bool = false
 
+    /// Whether the one-shot "ready" welcome chip has fired this session.
+    @ObservationIgnored private var didShowReady: Bool = false
+
     /// AR-scoped message bus — set by the hosting view before `start()`.
     weak var messages: ARMessages?
 
@@ -74,8 +77,24 @@ final class ARSessionManager: NSObject {
 
     /// Called by ARCoachingOverlay when Apple's onboarding UI shows
     /// or hides. While active we suppress our own tracking chips.
+    /// Also gives the welcome-chip logic a chance to fire once
+    /// coaching steps aside.
     func setCoachingActive(_ active: Bool) {
         coachingActive = active
+        if !active { maybeShowReady() }
+    }
+
+    /// Fire the one-shot "ready" chip the first time tracking goes
+    /// `.normal` while coaching isn't already explaining things.
+    /// Called from both the tracking-state delegate (clean cold
+    /// start) and from coaching deactivation (recovery from limited).
+    private func maybeShowReady() {
+        guard !didShowReady, !coachingActive else { return }
+        if case .normal = trackingState {
+            didShowReady = true
+            messages?.show("Ready — point at any surface to scan",
+                           kind: .success, lifetime: .auto(3))
+        }
     }
 
     func stop() {
@@ -84,6 +103,7 @@ final class ARSessionManager: NSObject {
         session.pause()
         isRunning = false
         stats.reset()
+        didShowReady = false
         Log.ar.info("ARSession paused")
     }
 
@@ -111,6 +131,7 @@ final class ARSessionManager: NSObject {
         switch state {
         case .normal:
             Log.ar.info("tracking: normal")
+            maybeShowReady()
         case .notAvailable:
             Log.ar.warning("tracking: not available")
             if !coachingActive {
