@@ -80,8 +80,9 @@ enum CameraFilter: String, CaseIterable, Identifiable, Sendable {
     /// Flip to true as each shader lands; the strip chip enables.
     var isImplemented: Bool {
         switch self {
-        case .none, .tint, .monochrome, .colorSwap, .posterize, .hueRotate: true
-        default:                                                            false
+        case .none, .tint, .monochrome, .colorSwap, .posterize,
+             .hueRotate, .vignette, .pixelate, .thermal: true
+        case .edgeDetect:                                false
         }
     }
 }

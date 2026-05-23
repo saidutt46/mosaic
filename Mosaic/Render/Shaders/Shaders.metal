@@ -282,3 +282,96 @@ fragment float4 cameraFragmentHueRotate(CameraVertexOut in [[stage_in]],
 
     return float4(result, 1.0);
 }
+
+// MARK: - Filter 6 · vignette (radial darken)
+//
+// First filter that uses the pixel's POSITION (in.texCoord) instead
+// of just its colour. Every fragment knows where it is on screen —
+// that lets us do "shape" effects: vignettes, masks, radial blurs,
+// scan lines, etc.
+//
+// Recipe:
+//   1. Distance from pixel to image center (texCoord 0.5, 0.5).
+//   2. Smoothstep that distance through a falloff range — bright
+//      in the middle, smoothly dark toward the corners.
+//   3. Multiply the colour by the falloff factor.
+//
+// New intrinsic: length(v) — Euclidean length of a vector.
+// length(uv - 0.5) is the standard "distance from center" idiom.
+fragment float4 cameraFragmentVignette(CameraVertexOut in [[stage_in]],
+                                        texture2d<float> luma   [[texture(0)]],
+                                        texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+
+    // Distance from this pixel to the image centre. Range ~0..0.71
+    // (centre to corner of the unit UV square).
+    float distFromCentre = length(in.texCoord - 0.5);
+
+    // Falloff: full brightness inside radius 0.25, fully dark by
+    // radius 0.75. Inverted smoothstep so closer = brighter.
+    float brightness = smoothstep(0.75, 0.25, distFromCentre);
+
+    return float4(rgb * brightness, 1.0);
+}
+
+// MARK: - Filter 7 · pixelate (snap UV to a grid)
+//
+// On-brand for this app — produces a literal mosaic of the camera
+// feed. The trick: change the UV BEFORE sampling so every pixel in
+// the same grid cell samples the same texel.
+//
+//   snapped = floor(uv * cells) / cells
+//
+// This is the same quantize formula as Posterize (filter 4), but
+// applied to coordinates instead of colours. Higher `cells` → finer
+// mosaic; lower → chunkier.
+fragment float4 cameraFragmentPixelate(CameraVertexOut in [[stage_in]],
+                                        texture2d<float> luma   [[texture(0)]],
+                                        texture2d<float> chroma [[texture(1)]]) {
+    constexpr float cells = 80.0;  // number of grid cells per axis
+
+    // Snap the texCoord to the nearest grid intersection, then add
+    // half-cell so we sample the centre of each cell (not the corner).
+    float2 snapped = (floor(in.texCoord * cells) + 0.5) / cells;
+    float3 rgb = sampleCameraRGB(snapped, luma, chroma);
+
+    return float4(rgb, 1.0);
+}
+
+// MARK: - Filter 9 · thermal vision (luma → palette ramp)
+//
+// Classic "predator / FLIR" look. Collapse the colour to brightness
+// (just like Monochrome), then use that brightness as a lookup into
+// a hand-picked colour gradient: cold blue → cyan → green → yellow
+// → hot red. The world becomes a heat map.
+//
+// Construction: 4 mix() calls layered on top of each other, each
+// activated for a different brightness range via smoothstep. The
+// `1 - smoothstep` trick from Colour Swap (filter 3) returns
+// (`1 - 0 = 1` when inside the range, `1 - 1 = 0` when past it),
+// so we can chain mixes that each handle their slice of the ramp.
+fragment float4 cameraFragmentThermal(CameraVertexOut in [[stage_in]],
+                                       texture2d<float> luma   [[texture(0)]],
+                                       texture2d<float> chroma [[texture(1)]]) {
+    float3 rgb = sampleCameraRGB(in.texCoord, luma, chroma);
+
+    // Same BT.601 luma weights as the Monochrome filter.
+    float t = dot(rgb, float3(0.299, 0.587, 0.114));
+
+    // 5-stop heat ramp.
+    constexpr float3 cold = float3(0.00, 0.00, 0.30);   // deep blue
+    constexpr float3 cool = float3(0.00, 0.55, 1.00);   // cyan
+    constexpr float3 mid  = float3(0.00, 0.95, 0.20);   // green
+    constexpr float3 warm = float3(1.00, 0.90, 0.00);   // yellow
+    constexpr float3 hot  = float3(1.00, 0.10, 0.00);   // red
+
+    // Start at coldest, then progressively mix toward warmer stops
+    // as `t` crosses each quartile.
+    float3 result = cold;
+    result = mix(result, cool, smoothstep(0.00, 0.25, t));
+    result = mix(result, mid,  smoothstep(0.25, 0.50, t));
+    result = mix(result, warm, smoothstep(0.50, 0.75, t));
+    result = mix(result, hot,  smoothstep(0.75, 1.00, t));
+
+    return float4(result, 1.0);
+}
