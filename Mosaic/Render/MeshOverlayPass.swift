@@ -45,7 +45,17 @@ final class MeshOverlayPass {
     private let pipelineState: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
 
-    var fillMode: FillMode = .wireframe
+    var fillMode: FillMode = .filled
+
+    /// Per-fillMode alpha pushed to the fragment shader. Wireframe
+    /// needs full opacity (thin lines vanish at low alpha); filled
+    /// wants translucency so the camera shows through the X-ray.
+    private static func alpha(for fillMode: FillMode) -> Float {
+        switch fillMode {
+        case .wireframe: 1.0
+        case .filled:    0.55
+        }
+    }
 
     init(context: MetalContext,
          colorPixelFormat: MTLPixelFormat,
@@ -63,6 +73,18 @@ final class MeshOverlayPass {
         descriptor.fragmentFunction = fragmentFn
         descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
         descriptor.depthAttachmentPixelFormat = depthPixelFormat
+
+        // Alpha blend the mesh over the camera background using
+        // straight (non-premultiplied) alpha. fillMode controls how
+        // translucent the mesh ends up via a fragment-side alpha
+        // multiplier.
+        descriptor.colorAttachments[0].isBlendingEnabled = true
+        descriptor.colorAttachments[0].rgbBlendOperation = .add
+        descriptor.colorAttachments[0].alphaBlendOperation = .add
+        descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        descriptor.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+        descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
 
         do {
             self.pipelineState = try context.device
@@ -120,6 +142,15 @@ final class MeshOverlayPass {
             &palette,
             length: MemoryLayout<SIMD4<Float>>.size * palette.count,
             index: 1
+        )
+
+        // Alpha derives from the current fillMode (wireframe opaque,
+        // filled translucent). Pushed as fragment buffer slot 2.
+        var alpha: Float = Self.alpha(for: fillMode)
+        encoder.setFragmentBytes(
+            &alpha,
+            length: MemoryLayout<Float>.size,
+            index: 2
         )
 
         for buffers in snapshot {

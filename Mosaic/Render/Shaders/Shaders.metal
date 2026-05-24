@@ -420,9 +420,12 @@ vertex MeshVertexOut meshVertex(uint vid [[vertex_id]],
 fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
                               uint primitiveID        [[primitive_id]],
                               constant uchar   *classifications [[buffer(0)]],
-                              constant float4  *palette         [[buffer(1)]]) {
+                              constant float4  *palette         [[buffer(1)]],
+                              constant float   &alpha           [[buffer(2)]]) {
     uint classIndex = uint(classifications[primitiveID]);
-    return palette[classIndex];
+    float4 color = palette[classIndex];
+    color.a *= alpha;
+    return color;
 }
 
 // MARK: - Filter 8 · edge detect (Sobel convolution)
