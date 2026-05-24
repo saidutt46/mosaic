@@ -12,12 +12,26 @@ import SwiftUI
 
 struct XrayClassificationSheet: View {
     @Bindable var styles: ClassificationStyles
+    @Binding var opacity: Float
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Mesh") {
+                    VStack(alignment: .leading, spacing: MosaicSpacing.xs) {
+                        HStack {
+                            Label("Opacity", systemImage: "circle.lefthalf.filled")
+                            Spacer()
+                            Text("\(Int(opacity * 100))%")
+                                .font(MosaicFont.monoCaption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $opacity, in: 0...1)
+                    }
+                }
+
                 Section {
                     ForEach($styles.entries) { $entry in
                         HStack(spacing: MosaicSpacing.md) {
@@ -65,5 +79,9 @@ struct XrayClassificationSheet: View {
 }
 
 #Preview {
-    XrayClassificationSheet(styles: ClassificationStyles())
+    @Previewable @State var opacity: Float = 0.55
+    XrayClassificationSheet(
+        styles: ClassificationStyles(),
+        opacity: $opacity
+    )
 }

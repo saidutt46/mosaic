@@ -101,6 +101,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         meshOverlayPass.fresnelIntensity = intensity
     }
 
+    func setMeshOpacity(_ opacity: Float) {
+        meshOverlayPass.opacity = opacity
+    }
+
     func setMeshPalette(_ palette: [SIMD4<Float>]) {
         guard palette.count == 8 else { return }  // ARMeshClassification has 8 cases
         meshOverlayPass.palette = palette

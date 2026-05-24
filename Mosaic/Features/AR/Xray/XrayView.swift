@@ -31,6 +31,7 @@ struct XrayView: View {
     @State private var meshFillMode: MeshOverlayPass.FillMode = .wireframe
     @State private var meshDensity: MeshDensity = .full
     @State private var meshFresnelIntensity: Float = 0.0
+    @State private var meshOpacity: Float = 0.55
     @State private var classificationStyles = ClassificationStyles()
     @State private var captureTrigger: Int = 0
     @State private var showingClassification = false
@@ -45,6 +46,7 @@ struct XrayView: View {
                 meshFillMode: meshFillMode,
                 meshDensity: meshDensity,
                 meshFresnelIntensity: meshFresnelIntensity,
+                meshOpacity: meshOpacity,
                 meshPalette: classificationStyles.palette,
                 meshClassVisibilityMask: classificationStyles.visibilityMask,
                 captureTrigger: captureTrigger,
@@ -125,7 +127,10 @@ struct XrayView: View {
             }
         }
         .sheet(isPresented: $showingClassification) {
-            XrayClassificationSheet(styles: classificationStyles)
+            XrayClassificationSheet(
+                styles: classificationStyles,
+                opacity: $meshOpacity
+            )
         }
         .sheet(isPresented: $showingStats) {
             MeshStatsSheet(

@@ -93,18 +93,9 @@ final class MeshOverlayPass {
     var fillMode: FillMode = .wireframe
     var density: MeshDensity = .full
     var fresnelIntensity: Float = 0.0
+    var opacity: Float = 0.55                       // 0…1 alpha multiplier
     var palette: [SIMD4<Float>] = defaultPalette
     var classVisibilityMask: UInt32 = defaultVisibilityMask
-
-    /// Per-fillMode alpha pushed to the fragment shader. Wireframe
-    /// needs full opacity (thin lines vanish at low alpha); filled
-    /// wants translucency so the camera shows through the X-ray.
-    private static func alpha(for fillMode: FillMode) -> Float {
-        switch fillMode {
-        case .wireframe: 1.0
-        case .filled:    0.55
-        }
-    }
 
     init(context: MetalContext,
          colorPixelFormat: MTLPixelFormat,
@@ -209,7 +200,7 @@ final class MeshOverlayPass {
         // fragment buffer slot 2. classVisibilityMask gates which
         // classes draw at all (see shader: discard_fragment).
         var uniforms = MeshUniforms(
-            alpha: Self.alpha(for: fillMode),
+            alpha: opacity,                 // user-driven; was fillMode-derived
             time: 0,                        // scan-line slot, no-op
             fresnelIntensity: fresnelIntensity,
             scanLineIntensity: 0,

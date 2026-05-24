@@ -27,6 +27,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     let meshFillMode: MeshOverlayPass.FillMode
     let meshDensity: MeshDensity
     let meshFresnelIntensity: Float
+    let meshOpacity: Float
     let meshPalette: [SIMD4<Float>]
     let meshClassVisibilityMask: UInt32
     let captureTrigger: Int
@@ -43,6 +44,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         renderer.setMeshFillMode(meshFillMode)
         renderer.setMeshDensity(meshDensity)
         renderer.setMeshFresnelIntensity(meshFresnelIntensity)
+        renderer.setMeshOpacity(meshOpacity)
         renderer.setMeshPalette(meshPalette)
         renderer.setMeshClassVisibility(meshClassVisibilityMask)
         context.coordinator.renderer = renderer
@@ -55,6 +57,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         context.coordinator.renderer?.setMeshFillMode(meshFillMode)
         context.coordinator.renderer?.setMeshDensity(meshDensity)
         context.coordinator.renderer?.setMeshFresnelIntensity(meshFresnelIntensity)
+        context.coordinator.renderer?.setMeshOpacity(meshOpacity)
         context.coordinator.renderer?.setMeshPalette(meshPalette)
         context.coordinator.renderer?.setMeshClassVisibility(meshClassVisibilityMask)
 

@@ -47,6 +47,7 @@ struct FiltersView: View {
                 meshFillMode: .filled,                           // ignored
                 meshDensity: .full,                              // ignored
                 meshFresnelIntensity: 0.0,                       // ignored
+                meshOpacity: 1.0,                                // ignored
                 meshPalette: MeshOverlayPass.defaultPalette,     // ignored
                 meshClassVisibilityMask: MeshOverlayPass.defaultVisibilityMask, // ignored
                 captureTrigger: captureTrigger,
