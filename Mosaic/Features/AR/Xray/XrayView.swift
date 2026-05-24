@@ -29,6 +29,7 @@ struct XrayView: View {
     @State private var messages = ARMessages()
     @State private var stats = MeshStatsModel()
     @State private var meshFillMode: MeshOverlayPass.FillMode = .wireframe
+    @State private var meshDensity: MeshDensity = .full
     @State private var captureTrigger: Int = 0
     @State private var showingPalette = false
     @State private var showingStats = false
@@ -40,6 +41,7 @@ struct XrayView: View {
                 meshCache: sessionManager.meshCache,   // ⟵ mesh ON
                 filter: .none,                          // no camera filter in Xray
                 meshFillMode: meshFillMode,
+                meshDensity: meshDensity,
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )
@@ -124,7 +126,8 @@ struct XrayView: View {
             MeshStatsSheet(
                 faceCount: stats.faceCount,
                 anchorCount: stats.anchorCount,
-                fps: stats.fps
+                fps: stats.fps,
+                density: $meshDensity
             )
         }
         .onAppear {

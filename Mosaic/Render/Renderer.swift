@@ -93,6 +93,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         meshOverlayPass.fillMode = mode
     }
 
+    func setMeshDensity(_ density: MeshDensity) {
+        meshOverlayPass.density = density
+    }
+
     // MARK: - Capture
 
     /// Schedule a one-shot snapshot of the currently rendered

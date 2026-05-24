@@ -406,25 +406,48 @@ vertex MeshVertexOut meshVertex(uint vid [[vertex_id]],
     return out;
 }
 
-// MARK: - Mesh fragment (B.3 — per-class colour)
+// MARK: - Mesh shader uniforms
+//
+// Shared between Swift (struct MeshUniforms) and the mesh fragment.
+// Layout is tightly packed (all 4-byte fields) so the same byte
+// sequence pushed by setFragmentBytes maps 1:1 here.
+struct MeshUniforms {
+    float alpha;             // fillMode-derived translucency
+    float time;              // seconds since render start (scan line)
+    float fresnelIntensity;  // 0..1
+    float scanLineIntensity; // 0..1
+    uint  densityStride;     // 1 = all, 2 = every other, 4 = quarter, 8 = sparse
+};
+
+// MARK: - Mesh fragment (B.3 — per-class colour + effects)
 //
 // Each triangle gets a colour based on its ARMeshClassification.
 // We read the classification straight out of our per-face UInt8
 // buffer via [[primitive_id]] (the index of the rasterising
 // triangle), then index into an 8-entry palette uniform.
 //
-// This avoids vertex duplication: vertices are shared between
-// neighbouring triangles, but classification is per-FACE, so we
-// resolve it in the fragment via primitive_id instead of trying
-// to fold it into a vertex attribute.
+// Density: if stride > 1 we discard fragments whose primitive
+// index isn't divisible by the stride. That gives a sparse mesh
+// at a fraction of the visible triangle cost. discard_fragment
+// is fine on Apple GPUs for this access pattern.
+//
+// Fresnel + scan-line effects are scaffolded but no-op for now —
+// they'll light up once we wire normals/world-space in the next
+// commits.
 fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
                               uint primitiveID        [[primitive_id]],
-                              constant uchar   *classifications [[buffer(0)]],
-                              constant float4  *palette         [[buffer(1)]],
-                              constant float   &alpha           [[buffer(2)]]) {
+                              constant uchar         *classifications [[buffer(0)]],
+                              constant float4        *palette         [[buffer(1)]],
+                              constant MeshUniforms  &uniforms        [[buffer(2)]]) {
+    // Density discard — early exit before the palette lookup.
+    if (uniforms.densityStride > 1 &&
+        (primitiveID % uniforms.densityStride) != 0) {
+        discard_fragment();
+    }
+
     uint classIndex = uint(classifications[primitiveID]);
     float4 color = palette[classIndex];
-    color.a *= alpha;
+    color.a *= uniforms.alpha;
     return color;
 }
 

@@ -2,9 +2,10 @@
 //  MeshStatsSheet.swift
 //  Mosaic
 //
-//  Detail sheet for the mesh stats capsule. Today shows surface,
-//  triangle, and frame-rate counts; per-class breakdown and other
-//  diagnostics land here as Track B grows.
+//  Detail sheet for the mesh stats capsule. Shows live surface /
+//  triangle / FPS counts and exposes the mesh-density control
+//  (dropdown). Future Track B controls (per-class colour picker,
+//  effects toggles, etc.) land here as more sections.
 //
 
 import SwiftUI
@@ -13,8 +14,14 @@ struct MeshStatsSheet: View {
     let faceCount: Int
     let anchorCount: Int
     let fps: Double?
+    @Binding var density: MeshDensity
 
     @Environment(\.dismiss) private var dismiss
+
+    private var visibleFaceCount: Int {
+        guard density.rawValue > 0 else { return faceCount }
+        return faceCount / Int(density.rawValue)
+    }
 
     var body: some View {
         NavigationStack {
@@ -30,6 +37,22 @@ struct MeshStatsSheet: View {
                             .font(MosaicFont.monoBody)
                             .foregroundStyle(.secondary)
                     }
+                    LabeledContent("Drawn") {
+                        Text(visibleFaceCount.formatted())
+                            .font(MosaicFont.monoBody)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Render") {
+                    Picker(selection: $density) {
+                        ForEach(MeshDensity.allCases) { d in
+                            Text("\(d.label) · \(d.percentLabel)").tag(d)
+                        }
+                    } label: {
+                        Label("Density", systemImage: "circle.grid.3x3")
+                    }
+                    .pickerStyle(.menu)
                 }
 
                 Section("Performance") {
@@ -59,5 +82,11 @@ struct MeshStatsSheet: View {
 }
 
 #Preview {
-    MeshStatsSheet(faceCount: 18432, anchorCount: 12, fps: 60)
+    @Previewable @State var density: MeshDensity = .full
+    MeshStatsSheet(
+        faceCount: 18432,
+        anchorCount: 12,
+        fps: 60,
+        density: $density
+    )
 }

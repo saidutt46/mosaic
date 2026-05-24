@@ -18,6 +18,48 @@ import simd
 import UIKit
 import os
 
+/// Mesh-shader uniforms — must stay in lockstep with the
+/// `MeshUniforms` struct in Shaders.metal. Tightly packed 4-byte
+/// fields; 20 bytes total. Pushed to the fragment shader as a
+/// single `setFragmentBytes` call at slot 2.
+struct MeshUniforms {
+    var alpha: Float
+    var time: Float
+    var fresnelIntensity: Float
+    var scanLineIntensity: Float
+    var densityStride: UInt32
+}
+
+/// User-facing density preset. Raw value is the shader's
+/// `densityStride` (1 = all triangles, 8 = sparse).
+enum MeshDensity: UInt32, CaseIterable, Identifiable, Sendable {
+    case full    = 1
+    case half    = 2
+    case quarter = 4
+    case sparse  = 8
+
+    var id: UInt32 { rawValue }
+
+    var label: String {
+        switch self {
+        case .full:    "Full"
+        case .half:    "Half"
+        case .quarter: "Quarter"
+        case .sparse:  "Sparse"
+        }
+    }
+
+    /// Approximate percentage of triangles drawn at this stride.
+    var percentLabel: String {
+        switch self {
+        case .full:    "100%"
+        case .half:    "50%"
+        case .quarter: "25%"
+        case .sparse:  "12%"
+        }
+    }
+}
+
 final class MeshOverlayPass {
 
     enum FillMode: Sendable {
@@ -46,6 +88,7 @@ final class MeshOverlayPass {
     private let depthState: MTLDepthStencilState
 
     var fillMode: FillMode = .wireframe
+    var density: MeshDensity = .full
 
     /// Per-fillMode alpha pushed to the fragment shader. Wireframe
     /// needs full opacity (thin lines vanish at low alpha); filled
@@ -144,12 +187,20 @@ final class MeshOverlayPass {
             index: 1
         )
 
-        // Alpha derives from the current fillMode (wireframe opaque,
-        // filled translucent). Pushed as fragment buffer slot 2.
-        var alpha: Float = Self.alpha(for: fillMode)
+        // All per-frame mesh-shader uniforms pushed as one struct
+        // at fragment buffer slot 2. Fresnel + scan-line fields are
+        // present but no-op until the next commits wire normals /
+        // world-space coordinates through the vertex stage.
+        var uniforms = MeshUniforms(
+            alpha: Self.alpha(for: fillMode),
+            time: 0,
+            fresnelIntensity: 0,
+            scanLineIntensity: 0,
+            densityStride: density.rawValue
+        )
         encoder.setFragmentBytes(
-            &alpha,
-            length: MemoryLayout<Float>.size,
+            &uniforms,
+            length: MemoryLayout<MeshUniforms>.stride,
             index: 2
         )
 

@@ -25,6 +25,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     let meshCache: MeshAnchorBufferCache?
     let filter: CameraFilter
     let meshFillMode: MeshOverlayPass.FillMode
+    let meshDensity: MeshDensity
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
 
@@ -37,6 +38,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         let renderer = Renderer(view: view, session: session, meshCache: meshCache)
         renderer.setFilter(filter)
         renderer.setMeshFillMode(meshFillMode)
+        renderer.setMeshDensity(meshDensity)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger
         return view
@@ -45,6 +47,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: MTKView, context: Context) {
         context.coordinator.renderer?.setFilter(filter)
         context.coordinator.renderer?.setMeshFillMode(meshFillMode)
+        context.coordinator.renderer?.setMeshDensity(meshDensity)
 
         if captureTrigger != context.coordinator.lastCaptureTrigger {
             context.coordinator.lastCaptureTrigger = captureTrigger
