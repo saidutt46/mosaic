@@ -31,8 +31,9 @@ struct XrayView: View {
     @State private var meshFillMode: MeshOverlayPass.FillMode = .wireframe
     @State private var meshDensity: MeshDensity = .full
     @State private var meshFresnelIntensity: Float = 0.0
+    @State private var classificationStyles = ClassificationStyles()
     @State private var captureTrigger: Int = 0
-    @State private var showingPalette = false
+    @State private var showingClassification = false
     @State private var showingStats = false
 
     var body: some View {
@@ -44,6 +45,8 @@ struct XrayView: View {
                 meshFillMode: meshFillMode,
                 meshDensity: meshDensity,
                 meshFresnelIntensity: meshFresnelIntensity,
+                meshPalette: classificationStyles.palette,
+                meshClassVisibilityMask: classificationStyles.visibilityMask,
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )
@@ -90,11 +93,11 @@ struct XrayView: View {
 
             ToolbarItem(placement: .bottomBar) {
                 Button {
-                    showingPalette = true
+                    showingClassification = true
                 } label: {
                     Image(systemName: "paintpalette.fill")
                 }
-                .accessibilityLabel("Palette")
+                .accessibilityLabel("Classification")
             }
             ToolbarSpacer(.fixed, placement: .bottomBar)
 
@@ -121,8 +124,8 @@ struct XrayView: View {
                 .accessibilityLabel(meshFillMode == .filled ? "Switch to wireframe" : "Switch to filled")
             }
         }
-        .sheet(isPresented: $showingPalette) {
-            XrayPaletteSheet()
+        .sheet(isPresented: $showingClassification) {
+            XrayClassificationSheet(styles: classificationStyles)
         }
         .sheet(isPresented: $showingStats) {
             MeshStatsSheet(

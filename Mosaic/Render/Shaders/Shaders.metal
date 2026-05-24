@@ -429,11 +429,12 @@ vertex MeshVertexOut meshVertex(uint vid                          [[vertex_id]],
 // Layout is tightly packed (all 4-byte fields) so the same byte
 // sequence pushed by setFragmentBytes maps 1:1 here.
 struct MeshUniforms {
-    float alpha;             // fillMode-derived translucency
-    float time;              // seconds since render start (scan line)
-    float fresnelIntensity;  // 0..1
-    float scanLineIntensity; // 0..1
-    uint  densityStride;     // 1 = all, 2 = every other, 4 = quarter, 8 = sparse
+    float alpha;                 // fillMode-derived translucency
+    float time;                  // seconds since render start (scan line)
+    float fresnelIntensity;      // 0..1
+    float scanLineIntensity;     // 0..1
+    uint  densityStride;         // 1 = all, 2 = every other, 4 = quarter, 8 = sparse
+    uint  classVisibilityMask;   // bit N set ⇒ ARMeshClassification.rawValue N drawn
 };
 
 // MARK: - Mesh fragment (B.3 — per-class colour + effects)
@@ -463,6 +464,14 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
     }
 
     uint classIndex = uint(classifications[primitiveID]);
+
+    // Per-class visibility — bit N of the mask gates class N.
+    // discard_fragment skips depth writes too, so hidden surfaces
+    // don't occlude objects behind them.
+    if ((uniforms.classVisibilityMask & (1u << classIndex)) == 0u) {
+        discard_fragment();
+    }
+
     float4 color = palette[classIndex];
     color.a *= uniforms.alpha;
 

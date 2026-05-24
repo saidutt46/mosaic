@@ -42,11 +42,13 @@ struct FiltersView: View {
         ZStack {
             ARMetalViewRepresentable(
                 session: sessionManager.session,
-                meshCache: nil,                // ⟵ no mesh in Filters
+                meshCache: nil,                                  // ⟵ no mesh in Filters
                 filter: filter,
-                meshFillMode: .filled,         // ignored when meshCache is nil
-                meshDensity: .full,            // ignored when meshCache is nil
-                meshFresnelIntensity: 0.0,     // ignored when meshCache is nil
+                meshFillMode: .filled,                           // ignored
+                meshDensity: .full,                              // ignored
+                meshFresnelIntensity: 0.0,                       // ignored
+                meshPalette: MeshOverlayPass.defaultPalette,     // ignored
+                meshClassVisibilityMask: MeshOverlayPass.defaultVisibilityMask, // ignored
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )

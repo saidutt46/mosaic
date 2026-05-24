@@ -20,7 +20,7 @@ import os
 
 /// Mesh-shader uniforms — must stay in lockstep with the
 /// `MeshUniforms` struct in Shaders.metal. Tightly packed 4-byte
-/// fields; 20 bytes total. Pushed to the fragment shader as a
+/// fields; 24 bytes total. Pushed to the fragment shader as a
 /// single `setFragmentBytes` call at slot 2.
 struct MeshUniforms {
     var alpha: Float
@@ -28,6 +28,7 @@ struct MeshUniforms {
     var fresnelIntensity: Float
     var scanLineIntensity: Float
     var densityStride: UInt32
+    var classVisibilityMask: UInt32   // bit N ⇒ class N visible
 }
 
 /// User-facing density preset. Raw value is the shader's
@@ -67,12 +68,11 @@ final class MeshOverlayPass {
         case filled
     }
 
-    /// Per-classification colour palette indexed by
+    /// Default per-classification colour palette, indexed by
     /// `ARMeshClassification` raw value (0 none … 7 door). Mirrors
-    /// `MosaicColor.Classification` — keep them in sync.
-    /// Stored as SIMD4<Float> so it pushes straight to the GPU as
-    /// a constant buffer.
-    private static let classificationPalette: [SIMD4<Float>] = [
+    /// `MosaicColor.Classification` — used as the starting point
+    /// before XrayView injects the user's customised palette.
+    static let defaultPalette: [SIMD4<Float>] = [
         SIMD4<Float>(0.56, 0.56, 0.58, 1.0), // 0 none      · gray
         SIMD4<Float>(0.35, 0.78, 0.98, 1.0), // 1 wall      · cyan
         SIMD4<Float>(0.20, 0.78, 0.35, 1.0), // 2 floor     · green
@@ -83,13 +83,18 @@ final class MeshOverlayPass {
         SIMD4<Float>(1.00, 0.22, 0.37, 1.0), // 7 door      · pink
     ]
 
+    /// All 8 classes visible — bits 0..7 set.
+    static let defaultVisibilityMask: UInt32 = 0xFF
+
     private let context: MetalContext
     private let pipelineState: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
 
     var fillMode: FillMode = .wireframe
     var density: MeshDensity = .full
-    var fresnelIntensity: Float = 0.0  // 0 = off, 1 = max edge glow
+    var fresnelIntensity: Float = 0.0
+    var palette: [SIMD4<Float>] = defaultPalette
+    var classVisibilityMask: UInt32 = defaultVisibilityMask
 
     /// Per-fillMode alpha pushed to the fragment shader. Wireframe
     /// needs full opacity (thin lines vanish at low alpha); filled
@@ -192,9 +197,8 @@ final class MeshOverlayPass {
                                length: MemoryLayout<SIMD3<Float>>.size,
                                index: 4)
 
-        // Palette is constant across all anchors — push once per
-        // frame as fragment buffer slot 1.
-        var palette = Self.classificationPalette
+        // User's per-class palette pushed once per frame at slot 1.
+        var palette = self.palette
         encoder.setFragmentBytes(
             &palette,
             length: MemoryLayout<SIMD4<Float>>.size * palette.count,
@@ -202,13 +206,15 @@ final class MeshOverlayPass {
         )
 
         // Per-frame mesh-shader uniforms pushed as one struct at
-        // fragment buffer slot 2.
+        // fragment buffer slot 2. classVisibilityMask gates which
+        // classes draw at all (see shader: discard_fragment).
         var uniforms = MeshUniforms(
             alpha: Self.alpha(for: fillMode),
-            time: 0,                        // scan-line uses this later
+            time: 0,                        // scan-line slot, no-op
             fresnelIntensity: fresnelIntensity,
-            scanLineIntensity: 0,           // wired in next commit
-            densityStride: density.rawValue
+            scanLineIntensity: 0,
+            densityStride: density.rawValue,
+            classVisibilityMask: classVisibilityMask
         )
         encoder.setFragmentBytes(
             &uniforms,
