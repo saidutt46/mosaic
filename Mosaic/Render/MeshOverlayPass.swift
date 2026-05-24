@@ -1,0 +1,119 @@
+//
+//  MeshOverlayPass.swift
+//  Mosaic
+//
+//  Renders the classified ARKit mesh on top of the camera feed.
+//  Reads from MeshAnchorBufferCache (one snapshot per frame) and
+//  issues a single indexed-triangle draw call per cached anchor.
+//
+//  B.2 — Wireframe in a flat colour. Validates the matrix pipeline
+//  (anchor-local → world → view → clip) and depth setup. Per-class
+//  colouring comes in B.3.
+//
+
+import Foundation
+import Metal
+import ARKit
+import simd
+import UIKit
+import os
+
+final class MeshOverlayPass {
+
+    enum FillMode: Sendable {
+        case wireframe
+        case filled
+    }
+
+    private let context: MetalContext
+    private let pipelineState: MTLRenderPipelineState
+    private let depthState: MTLDepthStencilState
+
+    var fillMode: FillMode = .wireframe
+
+    init(context: MetalContext,
+         colorPixelFormat: MTLPixelFormat,
+         depthPixelFormat: MTLPixelFormat) {
+        self.context = context
+
+        guard let vertexFn = context.library.makeFunction(name: "meshVertex"),
+              let fragmentFn = context.library.makeFunction(name: "meshFragment") else {
+            fatalError("MeshOverlayPass: missing mesh shader functions.")
+        }
+
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.label = "MeshOverlayPass"
+        descriptor.vertexFunction = vertexFn
+        descriptor.fragmentFunction = fragmentFn
+        descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
+        descriptor.depthAttachmentPixelFormat = depthPixelFormat
+
+        do {
+            self.pipelineState = try context.device
+                .makeRenderPipelineState(descriptor: descriptor)
+        } catch {
+            fatalError("MeshOverlayPass: pipeline creation failed: \(error)")
+        }
+
+        // Mesh writes depth and tests against itself so triangles
+        // behind closer ones get correctly hidden.
+        let depthDesc = MTLDepthStencilDescriptor()
+        depthDesc.label = "MeshOverlay.Depth"
+        depthDesc.depthCompareFunction = .less
+        depthDesc.isDepthWriteEnabled = true
+        guard let depthState = context.device.makeDepthStencilState(descriptor: depthDesc) else {
+            fatalError("MeshOverlayPass: depth-stencil state creation failed.")
+        }
+        self.depthState = depthState
+    }
+
+    /// Encode one indexed-triangle draw per cached mesh anchor.
+    /// Caller has already set up the render encoder + camera
+    /// background pass; this pass layers on top.
+    func encode(into encoder: MTLRenderCommandEncoder,
+                cache: MeshAnchorBufferCache,
+                frame: ARFrame,
+                viewportSize: CGSize,
+                orientation: UIInterfaceOrientation) {
+
+        let snapshot = cache.snapshot
+        guard !snapshot.isEmpty else { return }
+
+        // ARKit gives us a view+projection pair tuned to the
+        // current orientation and viewport — exactly what we need
+        // to draw into MTKView's clip space.
+        let viewMatrix = frame.camera.viewMatrix(for: orientation)
+        let projectionMatrix = frame.camera.projectionMatrix(
+            for: orientation,
+            viewportSize: viewportSize,
+            zNear: 0.001,
+            zFar: 50.0
+        )
+        let viewProjection = projectionMatrix * viewMatrix
+
+        encoder.pushDebugGroup("MeshOverlay")
+        encoder.setRenderPipelineState(pipelineState)
+        encoder.setDepthStencilState(depthState)
+        encoder.setTriangleFillMode(fillMode == .wireframe ? .lines : .fill)
+        encoder.setCullMode(.none)  // mesh has no consistent winding
+
+        for buffers in snapshot {
+            var mvp = viewProjection * buffers.transform
+
+            encoder.setVertexBuffer(buffers.vertexBuffer,
+                                    offset: 0, index: 0)
+            encoder.setVertexBytes(&mvp,
+                                   length: MemoryLayout<simd_float4x4>.size,
+                                   index: 1)
+            encoder.drawIndexedPrimitives(
+                type: .triangle,
+                indexCount: buffers.faceCount * 3,
+                indexType: .uint32,
+                indexBuffer: buffers.indexBuffer,
+                indexBufferOffset: 0
+            )
+        }
+
+        encoder.popDebugGroup()
+    }
+}

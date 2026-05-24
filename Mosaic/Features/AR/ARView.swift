@@ -36,6 +36,7 @@ struct ARView: View {
         ZStack {
             ARMetalViewRepresentable(
                 session: sessionManager.session,
+                meshCache: sessionManager.meshCache,
                 filter: filter,
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture

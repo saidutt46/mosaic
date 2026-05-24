@@ -21,8 +21,10 @@ import os
 final class Renderer: NSObject, MTKViewDelegate {
     private let context = MetalContext.shared
     private let cameraBackgroundPass: CameraBackgroundPass
+    private let meshOverlayPass: MeshOverlayPass
 
     weak var session: ARSession?
+    weak var meshCache: MeshAnchorBufferCache?
 
     private var viewportSize: CGSize = .zero
 
@@ -36,11 +38,15 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var captureCallback: (@Sendable (UIImage?) -> Void)?
     private var captureTexture: MTLTexture?
 
-    init(view: MTKView, session: ARSession) {
+    init(view: MTKView, session: ARSession, meshCache: MeshAnchorBufferCache) {
         view.device = context.device
         view.colorPixelFormat = .bgra8Unorm
-        view.depthStencilPixelFormat = .invalid
+        // Depth attachment so the mesh overlay pass can self-occlude.
+        // Camera pass disables write/test on this attachment (see
+        // CameraBackgroundPass) so it just paints colour.
+        view.depthStencilPixelFormat = .depth32Float
         view.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        view.clearDepth = 1.0
         // framebufferOnly must be false so capture can blit-copy the
         // drawable's texture into our CPU-readable capture texture.
         // Setting this to true (the default) makes drawable textures
@@ -52,9 +58,16 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         self.cameraBackgroundPass = CameraBackgroundPass(
             context: context,
-            colorPixelFormat: view.colorPixelFormat
+            colorPixelFormat: view.colorPixelFormat,
+            depthPixelFormat: view.depthStencilPixelFormat
+        )
+        self.meshOverlayPass = MeshOverlayPass(
+            context: context,
+            colorPixelFormat: view.colorPixelFormat,
+            depthPixelFormat: view.depthStencilPixelFormat
         )
         self.session = session
+        self.meshCache = meshCache
 
         super.init()
         viewportSize = view.drawableSize
@@ -102,6 +115,16 @@ final class Renderer: NSObject, MTKViewDelegate {
             viewportSize: viewportSize,
             orientation: orientation
         )
+
+        if let meshCache {
+            meshOverlayPass.encode(
+                into: encoder,
+                cache: meshCache,
+                frame: frame,
+                viewportSize: viewportSize,
+                orientation: orientation
+            )
+        }
 
         encoder.endEncoding()
 

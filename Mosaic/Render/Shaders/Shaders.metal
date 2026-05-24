@@ -376,6 +376,41 @@ fragment float4 cameraFragmentThermal(CameraVertexOut in [[stage_in]],
     return float4(result, 1.0);
 }
 
+// =============================================================
+// MARK: - Mesh overlay pass (Track B.2)
+// =============================================================
+//
+// First non-camera draw call. Takes the per-anchor MTLBuffers we
+// already cache in MeshAnchorBufferCache and renders the triangles
+// over the camera feed. Coordinates flow:
+//
+//   vertex (anchor-local) → MVP matrix → clip space
+//
+// where MVP = projection · view · anchor.transform, computed on
+// the CPU and pushed per draw as a single 4x4 uniform.
+//
+// Vertices come in as float3 (16-byte aligned — matches both
+// ARKit's `MTLVertexFormat.float3` source and our SIMD3<Float>
+// cache layout). Indexed via vertex_id, which Metal resolves
+// through the bound index buffer.
+
+struct MeshVertexOut {
+    float4 position [[position]];
+};
+
+vertex MeshVertexOut meshVertex(uint vid [[vertex_id]],
+                                 constant float3   *vertices [[buffer(0)]],
+                                 constant float4x4 &mvp      [[buffer(1)]]) {
+    MeshVertexOut out;
+    out.position = mvp * float4(vertices[vid], 1.0);
+    return out;
+}
+
+fragment float4 meshFragment(MeshVertexOut in [[stage_in]]) {
+    // Flat cyan for B.2 — per-class colouring lands in B.3.
+    return float4(0.45, 0.85, 1.0, 1.0);
+}
+
 // MARK: - Filter 8 · edge detect (Sobel convolution)
 //
 // The conceptual jump that unlocks everything from here on. Every

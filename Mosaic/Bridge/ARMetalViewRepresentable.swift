@@ -20,6 +20,7 @@ import UIKit
 
 struct ARMetalViewRepresentable: UIViewRepresentable {
     let session: ARSession
+    let meshCache: MeshAnchorBufferCache
     let filter: CameraFilter
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
@@ -30,7 +31,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero)
-        let renderer = Renderer(view: view, session: session)
+        let renderer = Renderer(view: view, session: session, meshCache: meshCache)
         renderer.setFilter(filter)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger

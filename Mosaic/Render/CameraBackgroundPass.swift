@@ -23,8 +23,10 @@ import os
 final class CameraBackgroundPass {
     private let context: MetalContext
     private let colorPixelFormat: MTLPixelFormat
+    private let depthPixelFormat: MTLPixelFormat
     private let vertexFunction: MTLFunction
     private let textureCache: CVMetalTextureCache
+    private let depthState: MTLDepthStencilState
 
     /// Cached pipeline state per filter. Built on demand.
     private var pipelineStates: [CameraFilter: MTLRenderPipelineState] = [:]
@@ -36,9 +38,12 @@ final class CameraBackgroundPass {
     private var lumaTexture: CVMetalTexture?
     private var chromaTexture: CVMetalTexture?
 
-    init(context: MetalContext, colorPixelFormat: MTLPixelFormat) {
+    init(context: MetalContext,
+         colorPixelFormat: MTLPixelFormat,
+         depthPixelFormat: MTLPixelFormat) {
         self.context = context
         self.colorPixelFormat = colorPixelFormat
+        self.depthPixelFormat = depthPixelFormat
 
         guard let vertexFn = context.library.makeFunction(name: "cameraVertex") else {
             fatalError("CameraBackgroundPass: missing cameraVertex function.")
@@ -53,6 +58,18 @@ final class CameraBackgroundPass {
             fatalError("CameraBackgroundPass: CVMetalTextureCache creation failed (\(status)).")
         }
         self.textureCache = cache
+
+        // Camera always passes the depth test and never writes to
+        // depth — it's a background fill. The mesh overlay pass
+        // (B.2+) writes/tests against itself on the same attachment.
+        let depthDesc = MTLDepthStencilDescriptor()
+        depthDesc.label = "CameraBackground.Depth"
+        depthDesc.depthCompareFunction = .always
+        depthDesc.isDepthWriteEnabled = false
+        guard let depthState = context.device.makeDepthStencilState(descriptor: depthDesc) else {
+            fatalError("CameraBackgroundPass: depth-stencil state creation failed.")
+        }
+        self.depthState = depthState
 
         // Pre-build the pass-through pipeline so we always have a
         // valid fallback when a filter's fragment can't be loaded.
@@ -113,6 +130,7 @@ final class CameraBackgroundPass {
 
         let pipeline = pipelineState(for: currentFilter) ?? pipelineStates[.none]!
         encoder.setRenderPipelineState(pipeline)
+        encoder.setDepthStencilState(depthState)
         encoder.setVertexBytes(&transform,
                                length: MemoryLayout<simd_float3x3>.size,
                                index: 0)
@@ -137,6 +155,7 @@ final class CameraBackgroundPass {
         descriptor.vertexFunction = vertexFunction
         descriptor.fragmentFunction = fragmentFn
         descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
+        descriptor.depthAttachmentPixelFormat = depthPixelFormat
 
         do {
             let state = try context.device
