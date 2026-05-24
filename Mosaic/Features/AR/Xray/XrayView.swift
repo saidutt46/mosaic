@@ -36,6 +36,7 @@ struct XrayView: View {
     @State private var captureTrigger: Int = 0
     @State private var showingClassification = false
     @State private var showingStats = false
+    @State private var showingPresets = false
 
     var body: some View {
         ZStack {
@@ -95,6 +96,16 @@ struct XrayView: View {
 
             ToolbarItem(placement: .bottomBar) {
                 Button {
+                    showingPresets = true
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .accessibilityLabel("Style presets")
+            }
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                Button {
                     showingClassification = true
                 } label: {
                     Image(systemName: "paintpalette.fill")
@@ -132,6 +143,11 @@ struct XrayView: View {
                 opacity: $meshOpacity
             )
         }
+        .sheet(isPresented: $showingPresets) {
+            XrayPresetSheet { preset in
+                applyPreset(preset)
+            }
+        }
         .sheet(isPresented: $showingStats) {
             MeshStatsSheet(
                 faceCount: stats.faceCount,
@@ -151,6 +167,19 @@ struct XrayView: View {
             stats.stop()
             sessionManager.stop()
             messages.clearAll()
+        }
+    }
+
+    // MARK: - Preset apply
+
+    @MainActor
+    private func applyPreset(_ preset: MeshPreset) {
+        withAnimation(MosaicMotion.smooth) {
+            meshFillMode = preset.fillMode
+            meshDensity = preset.density
+            meshOpacity = preset.opacity
+            meshFresnelIntensity = preset.fresnelIntensity
+            preset.apply(to: classificationStyles)
         }
     }
 
