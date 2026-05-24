@@ -43,6 +43,16 @@ final class ARSessionManager: NSObject {
     weak var messages: ARMessages?
 
     @ObservationIgnored private let stats = ClassificationStats()
+
+    /// Per-anchor GPU buffer cache, fed from the ARSession delegate.
+    /// The renderer reads `meshCache.snapshot` each frame to draw
+    /// the classified mesh overlay. Created up-front so the renderer
+    /// can hold a reference from view setup; safely empty until
+    /// anchors arrive.
+    let meshCache: MeshAnchorBufferCache = MeshAnchorBufferCache(
+        device: MetalContext.shared.device
+    )
+
     @ObservationIgnored private var summaryTask: Task<Void, Never>?
 
     private static let summaryInterval: TimeInterval = 2.0
@@ -138,6 +148,7 @@ final class ARSessionManager: NSObject {
         session.pause()
         isRunning = false
         stats.reset()
+        meshCache.reset()
         didShowReady = false
         Log.ar.info("ARSession paused")
     }
@@ -208,6 +219,7 @@ extension ARSessionManager: ARSessionDelegate {
             guard let self else { return }
             for anchor in meshes {
                 self.stats.update(from: anchor)
+                self.meshCache.update(from: anchor)
                 let short = String(anchor.identifier.uuidString.prefix(8))
                 Log.ar.debug("+anchor \(short, privacy: .public) faces=\(anchor.geometry.faces.count)")
             }
@@ -219,7 +231,10 @@ extension ARSessionManager: ARSessionDelegate {
         guard !meshes.isEmpty else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            for anchor in meshes { self.stats.update(from: anchor) }
+            for anchor in meshes {
+                self.stats.update(from: anchor)
+                self.meshCache.update(from: anchor)
+            }
         }
     }
 
@@ -230,6 +245,7 @@ extension ARSessionManager: ARSessionDelegate {
             guard let self else { return }
             for anchor in meshes {
                 self.stats.remove(anchor)
+                self.meshCache.remove(anchor)
                 let short = String(anchor.identifier.uuidString.prefix(8))
                 Log.ar.debug("-anchor \(short, privacy: .public)")
             }
