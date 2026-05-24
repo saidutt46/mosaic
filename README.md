@@ -15,9 +15,6 @@ The product roadmap is split into two tracks:
 
 Future tracks (post-v1): object detection layered on the mesh (YOLO / Vision), Object Capture / scene reconstruction video, mesh persistence (ARWorldMap), export (OBJ / USD).
 
-The full product spec is in [`docs/AR-LIDAR-MESH-PRD.md`](docs/AR-LIDAR-MESH-PRD.md) (currently still in `~/Code/scratch/`).
-The complete phased plan with done/pending status is in [`TASKS.md`](TASKS.md).
-
 ---
 
 ## What's running today

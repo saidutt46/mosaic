@@ -29,6 +29,31 @@ fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
 
-## Misc
+## Editor / IDE settings
+.vscode/
+.idea/
+*.iml
+.history/
+
+## Local secrets / env
+.env
+.env.*
+secrets.plist
+GoogleService-Info.plist
+
+## Private planning & notes (kept local; never pushed)
+TASKS.md
+CLAUDE.md
+AGENTS.md
+NOTES.md
+TODO.md
+.private/
+docs/private/
+*.private.md
+*.local.md
+*.draft.md
+
+## OS / misc
 *.swp
 *~.nib
+Thumbs.db
