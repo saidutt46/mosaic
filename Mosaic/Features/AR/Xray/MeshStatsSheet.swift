@@ -15,6 +15,7 @@ struct MeshStatsSheet: View {
     let anchorCount: Int
     let fps: Double?
     @Binding var density: MeshDensity
+    @Binding var fresnelIntensity: Float
 
     @Environment(\.dismiss) private var dismiss
 
@@ -55,6 +56,19 @@ struct MeshStatsSheet: View {
                     .pickerStyle(.menu)
                 }
 
+                Section("Effects") {
+                    VStack(alignment: .leading, spacing: MosaicSpacing.xs) {
+                        HStack {
+                            Label("Edge glow", systemImage: "sparkles")
+                            Spacer()
+                            Text("\(Int(fresnelIntensity * 100))%")
+                                .font(MosaicFont.monoCaption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $fresnelIntensity, in: 0...1)
+                    }
+                }
+
                 Section("Performance") {
                     LabeledContent("Frames per second") {
                         if let fps {
@@ -83,10 +97,12 @@ struct MeshStatsSheet: View {
 
 #Preview {
     @Previewable @State var density: MeshDensity = .full
+    @Previewable @State var fresnel: Float = 0.0
     MeshStatsSheet(
         faceCount: 18432,
         anchorCount: 12,
         fps: 60,
-        density: $density
+        density: $density,
+        fresnelIntensity: $fresnel
     )
 }

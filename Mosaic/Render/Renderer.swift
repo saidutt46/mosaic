@@ -97,6 +97,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         meshOverlayPass.density = density
     }
 
+    func setMeshFresnelIntensity(_ intensity: Float) {
+        meshOverlayPass.fresnelIntensity = intensity
+    }
+
     // MARK: - Capture
 
     /// Schedule a one-shot snapshot of the currently rendered

@@ -26,6 +26,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     let filter: CameraFilter
     let meshFillMode: MeshOverlayPass.FillMode
     let meshDensity: MeshDensity
+    let meshFresnelIntensity: Float
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
 
@@ -39,6 +40,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         renderer.setFilter(filter)
         renderer.setMeshFillMode(meshFillMode)
         renderer.setMeshDensity(meshDensity)
+        renderer.setMeshFresnelIntensity(meshFresnelIntensity)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger
         return view
@@ -48,6 +50,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         context.coordinator.renderer?.setFilter(filter)
         context.coordinator.renderer?.setMeshFillMode(meshFillMode)
         context.coordinator.renderer?.setMeshDensity(meshDensity)
+        context.coordinator.renderer?.setMeshFresnelIntensity(meshFresnelIntensity)
 
         if captureTrigger != context.coordinator.lastCaptureTrigger {
             context.coordinator.lastCaptureTrigger = captureTrigger

@@ -396,13 +396,30 @@ fragment float4 cameraFragmentThermal(CameraVertexOut in [[stage_in]],
 
 struct MeshVertexOut {
     float4 position [[position]];
+    float3 worldNormal;       // world-space normal, for Fresnel
+    float3 viewDir;           // unit vector vertex→camera, world space
+    float  worldY;            // for scan-line modulation later
 };
 
-vertex MeshVertexOut meshVertex(uint vid [[vertex_id]],
-                                 constant float3   *vertices [[buffer(0)]],
-                                 constant float4x4 &mvp      [[buffer(1)]]) {
+vertex MeshVertexOut meshVertex(uint vid                          [[vertex_id]],
+                                 constant float3   *vertices       [[buffer(0)]],
+                                 constant float4x4 &mvp            [[buffer(1)]],
+                                 constant float3   *normals        [[buffer(2)]],
+                                 constant float4x4 &model          [[buffer(3)]],
+                                 constant float3   &cameraWorldPos [[buffer(4)]]) {
+    float3 v = vertices[vid];
+    float3 n = normals[vid];
+    // ARKit's anchor.transform is rigid (rotation + translation),
+    // so the upper-left 3×3 is orthonormal — no inverse-transpose
+    // needed for normals.
+    float3 worldPos    = (model * float4(v, 1.0)).xyz;
+    float3 worldNormal = normalize((model * float4(n, 0.0)).xyz);
+
     MeshVertexOut out;
-    out.position = mvp * float4(vertices[vid], 1.0);
+    out.position    = mvp * float4(v, 1.0);
+    out.worldNormal = worldNormal;
+    out.viewDir     = normalize(cameraWorldPos - worldPos);
+    out.worldY      = worldPos.y;
     return out;
 }
 
@@ -448,6 +465,18 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
     uint classIndex = uint(classifications[primitiveID]);
     float4 color = palette[classIndex];
     color.a *= uniforms.alpha;
+
+    // Fresnel edge glow — brighten the colour toward white at
+    // glancing view angles. `facing` is 1 at face-on, 0 at grazing;
+    // `pow(1-facing, 2)` gives a soft S-curve that's strong only
+    // near silhouette edges.
+    if (uniforms.fresnelIntensity > 0.0) {
+        float facing  = saturate(dot(normalize(in.worldNormal),
+                                     normalize(in.viewDir)));
+        float fresnel = pow(1.0 - facing, 2.0);
+        color.rgb = saturate(color.rgb + fresnel * uniforms.fresnelIntensity);
+    }
+
     return color;
 }
 

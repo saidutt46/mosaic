@@ -89,6 +89,7 @@ final class MeshOverlayPass {
 
     var fillMode: FillMode = .wireframe
     var density: MeshDensity = .full
+    var fresnelIntensity: Float = 0.0  // 0 = off, 1 = max edge glow
 
     /// Per-fillMode alpha pushed to the fragment shader. Wireframe
     /// needs full opacity (thin lines vanish at low alpha); filled
@@ -172,11 +173,24 @@ final class MeshOverlayPass {
         )
         let viewProjection = projectionMatrix * viewMatrix
 
+        // Camera position in world space — used by the vertex
+        // shader to compute per-vertex view direction for Fresnel.
+        // ARCamera.transform is the camera-to-world transform, so
+        // the translation column IS the camera's world position.
+        let camCol = frame.camera.transform.columns.3
+        var cameraWorldPos = SIMD3<Float>(camCol.x, camCol.y, camCol.z)
+
         encoder.pushDebugGroup("MeshOverlay")
         encoder.setRenderPipelineState(pipelineState)
         encoder.setDepthStencilState(depthState)
         encoder.setTriangleFillMode(fillMode == .wireframe ? .lines : .fill)
         encoder.setCullMode(.none)  // mesh has no consistent winding
+
+        // Per-frame vertex uniform — push once, persists across the
+        // draw loop below.
+        encoder.setVertexBytes(&cameraWorldPos,
+                               length: MemoryLayout<SIMD3<Float>>.size,
+                               index: 4)
 
         // Palette is constant across all anchors — push once per
         // frame as fragment buffer slot 1.
@@ -187,15 +201,13 @@ final class MeshOverlayPass {
             index: 1
         )
 
-        // All per-frame mesh-shader uniforms pushed as one struct
-        // at fragment buffer slot 2. Fresnel + scan-line fields are
-        // present but no-op until the next commits wire normals /
-        // world-space coordinates through the vertex stage.
+        // Per-frame mesh-shader uniforms pushed as one struct at
+        // fragment buffer slot 2.
         var uniforms = MeshUniforms(
             alpha: Self.alpha(for: fillMode),
-            time: 0,
-            fresnelIntensity: 0,
-            scanLineIntensity: 0,
+            time: 0,                        // scan-line uses this later
+            fresnelIntensity: fresnelIntensity,
+            scanLineIntensity: 0,           // wired in next commit
             densityStride: density.rawValue
         )
         encoder.setFragmentBytes(
@@ -205,21 +217,30 @@ final class MeshOverlayPass {
         )
 
         for buffers in snapshot {
-            // Skip anchors that arrived without classifications —
-            // shouldn't happen under .meshWithClassification, but
-            // defending against the fragment indexing into nothing
-            // is cheaper than tracking down a crash later.
-            guard let classBuffer = buffers.classificationBuffer else {
+            // Skip anchors that arrived without classifications or
+            // normals — shouldn't happen under .meshWithClassification,
+            // but defending here is cheaper than tracking down a
+            // crash later.
+            guard let classBuffer = buffers.classificationBuffer,
+                  let normalBuffer = buffers.normalBuffer else {
                 continue
             }
 
             var mvp = viewProjection * buffers.transform
+            var model = buffers.transform
 
             encoder.setVertexBuffer(buffers.vertexBuffer,
                                     offset: 0, index: 0)
             encoder.setVertexBytes(&mvp,
                                    length: MemoryLayout<simd_float4x4>.size,
                                    index: 1)
+            encoder.setVertexBuffer(normalBuffer, offset: 0, index: 2)
+            encoder.setVertexBytes(&model,
+                                   length: MemoryLayout<simd_float4x4>.size,
+                                   index: 3)
+            // cameraWorldPos at vertex slot 4 is set once outside
+            // the loop — persists across draws.
+
             encoder.setFragmentBuffer(classBuffer, offset: 0, index: 0)
             encoder.drawIndexedPrimitives(
                 type: .triangle,

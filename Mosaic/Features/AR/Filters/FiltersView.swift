@@ -46,6 +46,7 @@ struct FiltersView: View {
                 filter: filter,
                 meshFillMode: .filled,         // ignored when meshCache is nil
                 meshDensity: .full,            // ignored when meshCache is nil
+                meshFresnelIntensity: 0.0,     // ignored when meshCache is nil
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )
