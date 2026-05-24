@@ -45,7 +45,7 @@ final class MeshOverlayPass {
     private let pipelineState: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
 
-    var fillMode: FillMode = .filled
+    var fillMode: FillMode = .wireframe
 
     /// Per-fillMode alpha pushed to the fragment shader. Wireframe
     /// needs full opacity (thin lines vanish at low alpha); filled

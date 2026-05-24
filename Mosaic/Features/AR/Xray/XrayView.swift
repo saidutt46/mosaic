@@ -27,7 +27,7 @@ struct XrayView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
-    @State private var meshFillMode: MeshOverlayPass.FillMode = .filled
+    @State private var meshFillMode: MeshOverlayPass.FillMode = .wireframe
     @State private var captureTrigger: Int = 0
     @State private var showingPalette = false
 
@@ -58,7 +58,7 @@ struct XrayView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            // MARK: Top bar
+            // MARK: Top bar — close only
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     dismiss()
@@ -67,7 +67,31 @@ struct XrayView: View {
                 }
             }
 
-            ToolbarItem(placement: .topBarTrailing) {
+            // MARK: Bottom bar — HUD on the left (empty for now),
+            // controls clustered on the right: palette · capture · toggle
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    showingPalette = true
+                } label: {
+                    Image(systemName: "paintpalette.fill")
+                }
+                .accessibilityLabel("Palette")
+            }
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    captureTrigger &+= 1
+                } label: {
+                    Image(systemName: "camera.fill")
+                }
+                .accessibilityLabel("Capture")
+            }
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
                 Button {
                     withAnimation(MosaicMotion.snappy) {
                         meshFillMode = (meshFillMode == .filled) ? .wireframe : .filled
@@ -78,25 +102,6 @@ struct XrayView: View {
                           : "cube.transparent")
                 }
                 .accessibilityLabel(meshFillMode == .filled ? "Switch to wireframe" : "Switch to filled")
-            }
-
-            // MARK: Bottom bar
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    captureTrigger &+= 1
-                } label: {
-                    Image(systemName: "camera.fill")
-                }
-                .accessibilityLabel("Capture")
-            }
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    showingPalette = true
-                } label: {
-                    Image(systemName: "paintpalette.fill")
-                }
-                .accessibilityLabel("Palette")
             }
         }
         .sheet(isPresented: $showingPalette) {
