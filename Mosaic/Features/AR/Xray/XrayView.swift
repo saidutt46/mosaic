@@ -27,9 +27,11 @@ struct XrayView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
+    @State private var stats = MeshStatsModel()
     @State private var meshFillMode: MeshOverlayPass.FillMode = .wireframe
     @State private var captureTrigger: Int = 0
     @State private var showingPalette = false
+    @State private var showingStats = false
 
     var body: some View {
         ZStack {
@@ -67,8 +69,16 @@ struct XrayView: View {
                 }
             }
 
-            // MARK: Bottom bar — HUD on the left (empty for now),
+            // MARK: Bottom bar — stats HUD on the left,
             // controls clustered on the right: palette · capture · toggle
+            ToolbarItem(placement: .bottomBar) {
+                MeshStatsCapsule(
+                    faceCount: stats.faceCount,
+                    fps: stats.fps
+                ) {
+                    showingStats = true
+                }
+            }
             ToolbarSpacer(.flexible, placement: .bottomBar)
 
             ToolbarItem(placement: .bottomBar) {
@@ -107,11 +117,21 @@ struct XrayView: View {
         .sheet(isPresented: $showingPalette) {
             XrayPaletteSheet()
         }
+        .sheet(isPresented: $showingStats) {
+            MeshStatsSheet(
+                faceCount: stats.faceCount,
+                anchorCount: stats.anchorCount,
+                fps: stats.fps
+            )
+        }
         .onAppear {
             sessionManager.messages = messages
             sessionManager.start()
+            stats.meshCache = sessionManager.meshCache
+            stats.start()
         }
         .onDisappear {
+            stats.stop()
             sessionManager.stop()
             messages.clearAll()
         }
