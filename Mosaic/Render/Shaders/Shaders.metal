@@ -406,9 +406,23 @@ vertex MeshVertexOut meshVertex(uint vid [[vertex_id]],
     return out;
 }
 
-fragment float4 meshFragment(MeshVertexOut in [[stage_in]]) {
-    // Flat cyan for B.2 — per-class colouring lands in B.3.
-    return float4(0.45, 0.85, 1.0, 1.0);
+// MARK: - Mesh fragment (B.3 — per-class colour)
+//
+// Each triangle gets a colour based on its ARMeshClassification.
+// We read the classification straight out of our per-face UInt8
+// buffer via [[primitive_id]] (the index of the rasterising
+// triangle), then index into an 8-entry palette uniform.
+//
+// This avoids vertex duplication: vertices are shared between
+// neighbouring triangles, but classification is per-FACE, so we
+// resolve it in the fragment via primitive_id instead of trying
+// to fold it into a vertex attribute.
+fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
+                              uint primitiveID        [[primitive_id]],
+                              constant uchar   *classifications [[buffer(0)]],
+                              constant float4  *palette         [[buffer(1)]]) {
+    uint classIndex = uint(classifications[primitiveID]);
+    return palette[classIndex];
 }
 
 // MARK: - Filter 8 · edge detect (Sobel convolution)

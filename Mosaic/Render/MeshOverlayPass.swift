@@ -25,6 +25,22 @@ final class MeshOverlayPass {
         case filled
     }
 
+    /// Per-classification colour palette indexed by
+    /// `ARMeshClassification` raw value (0 none … 7 door). Mirrors
+    /// `MosaicColor.Classification` — keep them in sync.
+    /// Stored as SIMD4<Float> so it pushes straight to the GPU as
+    /// a constant buffer.
+    private static let classificationPalette: [SIMD4<Float>] = [
+        SIMD4<Float>(0.56, 0.56, 0.58, 1.0), // 0 none      · gray
+        SIMD4<Float>(0.35, 0.78, 0.98, 1.0), // 1 wall      · cyan
+        SIMD4<Float>(0.20, 0.78, 0.35, 1.0), // 2 floor     · green
+        SIMD4<Float>(0.69, 0.32, 0.87, 1.0), // 3 ceiling   · purple
+        SIMD4<Float>(1.00, 0.58, 0.00, 1.0), // 4 table     · orange
+        SIMD4<Float>(1.00, 0.80, 0.00, 1.0), // 5 seat      · yellow
+        SIMD4<Float>(0.39, 0.82, 1.00, 1.0), // 6 window    · light blue
+        SIMD4<Float>(1.00, 0.22, 0.37, 1.0), // 7 door      · pink
+    ]
+
     private let context: MetalContext
     private let pipelineState: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
@@ -97,7 +113,24 @@ final class MeshOverlayPass {
         encoder.setTriangleFillMode(fillMode == .wireframe ? .lines : .fill)
         encoder.setCullMode(.none)  // mesh has no consistent winding
 
+        // Palette is constant across all anchors — push once per
+        // frame as fragment buffer slot 1.
+        var palette = Self.classificationPalette
+        encoder.setFragmentBytes(
+            &palette,
+            length: MemoryLayout<SIMD4<Float>>.size * palette.count,
+            index: 1
+        )
+
         for buffers in snapshot {
+            // Skip anchors that arrived without classifications —
+            // shouldn't happen under .meshWithClassification, but
+            // defending against the fragment indexing into nothing
+            // is cheaper than tracking down a crash later.
+            guard let classBuffer = buffers.classificationBuffer else {
+                continue
+            }
+
             var mvp = viewProjection * buffers.transform
 
             encoder.setVertexBuffer(buffers.vertexBuffer,
@@ -105,6 +138,7 @@ final class MeshOverlayPass {
             encoder.setVertexBytes(&mvp,
                                    length: MemoryLayout<simd_float4x4>.size,
                                    index: 1)
+            encoder.setFragmentBuffer(classBuffer, offset: 0, index: 0)
             encoder.drawIndexedPrimitives(
                 type: .triangle,
                 indexCount: buffers.faceCount * 3,
