@@ -60,7 +60,7 @@ struct XrayView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            // MARK: Top bar — close only
+            // MARK: Top bar — close (leading) · stats HUD (trailing)
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     dismiss()
@@ -69,9 +69,7 @@ struct XrayView: View {
                 }
             }
 
-            // MARK: Bottom bar — stats HUD on the left,
-            // controls clustered on the right: palette · capture · toggle
-            ToolbarItem(placement: .bottomBar) {
+            ToolbarItem(placement: .topBarTrailing) {
                 MeshStatsCapsule(
                     faceCount: stats.faceCount,
                     fps: stats.fps
@@ -79,6 +77,11 @@ struct XrayView: View {
                     showingStats = true
                 }
             }
+
+            // MARK: Bottom bar — leading area reserved for future
+            // option groups (density, opacity, effects). Right
+            // cluster keeps the action controls: palette · capture
+            // · fill-mode toggle.
             ToolbarSpacer(.flexible, placement: .bottomBar)
 
             ToolbarItem(placement: .bottomBar) {
