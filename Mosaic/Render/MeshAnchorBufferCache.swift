@@ -118,12 +118,22 @@ final class MeshAnchorBufferCache {
         assert(geom.faces.indexCountPerPrimitive == 3,
                "expected triangle faces")
 
-        // Vertices — tightly packed float3.
+        // float3 has 12 bytes of actual data per element. Swift's
+        // SIMD3<Float> is 16-byte aligned (4 trailing padding bytes)
+        // to match Metal's float3, but ARKit may deliver vertices /
+        // normals with either 12- or 16-byte stride depending on the
+        // device. Copy exactly 12 bytes per source slot into 16-byte
+        // dest slots — trailing padding stays uninitialised, but the
+        // shader's float3 only reads the first 3 floats.
+        let float3Payload = MemoryLayout<(Float, Float, Float)>.size  // 12
+        let float3SlotSize = MemoryLayout<SIMD3<Float>>.size           // 16
+
         guard let vertexBuffer = copyStridedSource(
             buffer: geom.vertices.buffer,
             offset: geom.vertices.offset,
             stride: geom.vertices.stride,
-            elementSize: MemoryLayout<SIMD3<Float>>.size,
+            payloadBytes: float3Payload,
+            elementSize: float3SlotSize,
             elementCount: vertexCount,
             label: "Mosaic.MeshVertices"
         ) else { return nil }
@@ -138,7 +148,8 @@ final class MeshAnchorBufferCache {
                 buffer: geom.normals.buffer,
                 offset: geom.normals.offset,
                 stride: geom.normals.stride,
-                elementSize: MemoryLayout<SIMD3<Float>>.size,
+                payloadBytes: float3Payload,
+                elementSize: float3SlotSize,
                 elementCount: normalCount,
                 label: "Mosaic.MeshNormals"
             )
@@ -166,6 +177,7 @@ final class MeshAnchorBufferCache {
                 buffer: cls.buffer,
                 offset: cls.offset,
                 stride: cls.stride,
+                payloadBytes: MemoryLayout<UInt8>.size,
                 elementSize: MemoryLayout<UInt8>.size,
                 elementCount: faceCount,
                 label: "Mosaic.MeshClassification"
@@ -184,14 +196,20 @@ final class MeshAnchorBufferCache {
         )
     }
 
-    /// Copy a (possibly strided) source range into a tightly-packed
-    /// destination MTLBuffer. If `stride == elementSize` (already
-    /// packed) a single memcpy is sufficient; otherwise we walk
-    /// element-by-element.
+    /// Copy a (possibly strided) source range into a destination
+    /// MTLBuffer. `payloadBytes` is the actual bytes of data per
+    /// element (≤ both stride and elementSize); `elementSize` is
+    /// the dest slot size. They differ when the dest needs
+    /// alignment padding (e.g. SIMD3<Float> data = 12 bytes, slot
+    /// = 16 bytes). The fast path runs only when everything aligns;
+    /// otherwise we walk element-by-element and copy exactly
+    /// payloadBytes per slot — never reading past the source even
+    /// when source stride < element size.
     private func copyStridedSource(
         buffer source: MTLBuffer,
         offset sourceOffset: Int,
         stride sourceStride: Int,
+        payloadBytes: Int,
         elementSize: Int,
         elementCount: Int,
         label: String
@@ -206,13 +224,13 @@ final class MeshAnchorBufferCache {
         let srcBase = source.contents().advanced(by: sourceOffset)
         let dstBase = dest.contents()
 
-        if sourceStride == elementSize {
+        if sourceStride == elementSize && payloadBytes == elementSize {
             memcpy(dstBase, srcBase, destByteSize)
         } else {
             for i in 0..<elementCount {
                 memcpy(dstBase.advanced(by: i * elementSize),
                        srcBase.advanced(by: i * sourceStride),
-                       elementSize)
+                       payloadBytes)
             }
         }
 
