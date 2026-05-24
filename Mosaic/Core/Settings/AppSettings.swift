@@ -51,10 +51,6 @@ final class AppSettings {
         didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) }
     }
 
-    var showDebugOverlay: Bool {
-        didSet { defaults.set(showDebugOverlay, forKey: Keys.showDebugOverlay) }
-    }
-
     // MARK: Init
 
     private let defaults: UserDefaults
@@ -63,13 +59,11 @@ final class AppSettings {
         self.defaults = defaults
         let raw = defaults.string(forKey: Keys.appearance) ?? AppearanceMode.system.rawValue
         self.appearance = AppearanceMode(rawValue: raw) ?? .system
-        self.showDebugOverlay = defaults.bool(forKey: Keys.showDebugOverlay)
     }
 
     // MARK: Keys
 
     private enum Keys {
-        static let appearance       = "settings.appearance"
-        static let showDebugOverlay = "settings.showDebugOverlay"
+        static let appearance = "settings.appearance"
     }
 }

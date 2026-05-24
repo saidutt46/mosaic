@@ -29,10 +29,7 @@ struct SettingsView: View {
                 Text("Appearance")
             }
 
-            Section {
-                Toggle(isOn: $settings.showDebugOverlay) {
-                    Label("Show debug overlay", systemImage: "gauge.with.dots.needle.67percent")
-                }
+            Section("Debug") {
                 NavigationLink {
                     DesignGallery()
                         .navigationTitle("Design Gallery")
@@ -40,10 +37,6 @@ struct SettingsView: View {
                 } label: {
                     Label("Design Gallery", systemImage: "paintpalette")
                 }
-            } header: {
-                Text("Debug")
-            } footer: {
-                Text("Debug overlay displays FPS, anchor count, and triangle count over the AR view.")
             }
 
             Section {
