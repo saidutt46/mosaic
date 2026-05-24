@@ -38,7 +38,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var captureCallback: (@Sendable (UIImage?) -> Void)?
     private var captureTexture: MTLTexture?
 
-    init(view: MTKView, session: ARSession, meshCache: MeshAnchorBufferCache) {
+    init(view: MTKView, session: ARSession, meshCache: MeshAnchorBufferCache?) {
         view.device = context.device
         view.colorPixelFormat = .bgra8Unorm
         // Depth attachment so the mesh overlay pass can self-occlude.
@@ -85,6 +85,12 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     func setFilter(_ filter: CameraFilter) {
         cameraBackgroundPass.setFilter(filter)
+    }
+
+    // MARK: - Mesh overlay
+
+    func setMeshFillMode(_ mode: MeshOverlayPass.FillMode) {
+        meshOverlayPass.fillMode = mode
     }
 
     // MARK: - Capture

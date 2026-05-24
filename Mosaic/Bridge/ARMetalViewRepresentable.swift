@@ -20,8 +20,11 @@ import UIKit
 
 struct ARMetalViewRepresentable: UIViewRepresentable {
     let session: ARSession
-    let meshCache: MeshAnchorBufferCache
+    /// Optional — when nil, the mesh overlay pass is skipped entirely.
+    /// FiltersView passes nil; XrayView passes its session manager's cache.
+    let meshCache: MeshAnchorBufferCache?
     let filter: CameraFilter
+    let meshFillMode: MeshOverlayPass.FillMode
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
 
@@ -33,6 +36,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         let view = MTKView(frame: .zero)
         let renderer = Renderer(view: view, session: session, meshCache: meshCache)
         renderer.setFilter(filter)
+        renderer.setMeshFillMode(meshFillMode)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger
         return view
@@ -40,6 +44,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ uiView: MTKView, context: Context) {
         context.coordinator.renderer?.setFilter(filter)
+        context.coordinator.renderer?.setMeshFillMode(meshFillMode)
 
         if captureTrigger != context.coordinator.lastCaptureTrigger {
             context.coordinator.lastCaptureTrigger = captureTrigger

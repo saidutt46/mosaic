@@ -14,6 +14,7 @@ import SwiftUI
 
 private enum HomeRoute: Hashable {
     case filters
+    case xray
 }
 
 struct HomeView: View {
@@ -40,7 +41,8 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
-                case .filters: ARView()
+                case .filters: FiltersView()
+                case .xray:    XrayView()
                 }
             }
             .toolbar {
@@ -111,8 +113,8 @@ struct HomeView: View {
                 subtitle: "Classified mesh",
                 icon: "cube.transparent.fill",
                 tint: .purple,
-                state: .unavailable("Soon"),
-                destination: nil
+                state: device.canRunMosaic ? .available : .unavailable("LiDAR"),
+                destination: .xray
             )
             QuickActionTile(
                 title: "Detect",

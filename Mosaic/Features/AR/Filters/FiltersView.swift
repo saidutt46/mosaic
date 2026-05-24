@@ -1,26 +1,32 @@
 //
-//  ARView.swift
+//  FiltersView.swift
 //  Mosaic
 //
-//  The AR experience root. Owns the ARSessionManager + ARMessages
-//  bus + active CameraFilter + capture trigger for this presentation.
-//  Renders the live camera through the Metal pipeline with coaching
-//  + message overlays layered above.
+//  Track A experience — the camera-filter playground. Owns the
+//  ARSessionManager + ARMessages bus + active CameraFilter +
+//  capture trigger for this presentation. Renders the live camera
+//  through the Metal pipeline with the user-selected fragment
+//  shader; coaching + message overlays layered above; filter strip
+//  pinned to the bottom safe area.
+//
+//  The mesh overlay is intentionally OFF here — FiltersView passes
+//  `meshCache: nil` to the renderer so the mesh pass is skipped.
+//  Track B's XrayView turns it on.
 //
 //  Chrome:
 //   - Toolbar leading:  close (X)
-//   - Toolbar trailing: capture · flip (if supported) · reset (if filter)
-//                       · help
+//   - Toolbar trailing: capture · flip (if supported) · reset
+//                       (if filter active) · help
 //     iOS 26 ToolbarSpacer(.fixed) separates each into its own
 //     Liquid Glass pill instead of merging.
-//   - Bottom safe-area: CameraFilterStrip (Track A filter pickers).
+//   - Bottom safe-area: CameraFilterStrip.
 //
 
 import SwiftUI
 import ARKit
 import os
 
-struct ARView: View {
+struct FiltersView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
@@ -36,8 +42,9 @@ struct ARView: View {
         ZStack {
             ARMetalViewRepresentable(
                 session: sessionManager.session,
-                meshCache: sessionManager.meshCache,
+                meshCache: nil,                // ⟵ no mesh in Filters
                 filter: filter,
+                meshFillMode: .filled,         // ignored when meshCache is nil
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )
@@ -107,8 +114,8 @@ struct ARView: View {
 
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    // TODO: AR help / quick-settings panel.
-                    Log.ui.debug("AR help button tapped (no-op)")
+                    // TODO: filter help / quick-settings panel.
+                    Log.ui.debug("Filters help button tapped (no-op)")
                 } label: {
                     Image(systemName: "questionmark")
                 }
