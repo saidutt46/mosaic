@@ -78,15 +78,18 @@ final class ScanRepository {
         do {
             var artifacts: [ScanArtifact] = [.manifest]
 
-            // USDZ — the primary shareable artifact. CPU-bound
-            // (0.5–3s); run off the main actor. The snapshot's buffers
+            // USDZ (shareable mesh) + PLY (semantic point cloud) — both
+            // CPU-bound; run off the main actor. The snapshot's buffers
             // are immutable shared-storage (MeshAnchorBuffers is
             // Sendable), so reading them from a detached task is safe.
             let usdzURL = writingDir.appendingPathComponent(ScanArtifact.usdz.filename)
+            let plyURL = writingDir.appendingPathComponent(ScanArtifact.pointCloud.filename)
             try await Task.detached(priority: .userInitiated) {
                 try USDZExporter.write(snapshot: snapshot, palette: palette, to: usdzURL)
+                try PLYExporter.write(snapshot: snapshot, palette: palette, to: plyURL)
             }.value
             artifacts.append(.usdz)
+            artifacts.append(.pointCloud)
 
             if let thumbnail, let jpeg = thumbnail.jpegData(compressionQuality: 0.8) {
                 try jpeg.write(to: writingDir.appendingPathComponent(ScanArtifact.thumbnail.filename))
