@@ -63,6 +63,7 @@ final class ScanRepository {
     @discardableResult
     func save(snapshot: [MeshAnchorBuffers],
               stats: (anchors: Int, faces: Int, vertices: Int),
+              palette: [SIMD4<Float>] = MeshOverlayPass.defaultPalette,
               thumbnail: UIImage?) async throws -> Scan {
         ensureScansDirectory()
 
@@ -77,9 +78,14 @@ final class ScanRepository {
         do {
             var artifacts: [ScanArtifact] = [.manifest]
 
-            // --- USDZ export (E.1.1) attaches here ---
-            // USDZExporter.write(snapshot:palette:to:) → writingDir/mesh.usdz
-            // append .usdz to artifacts on success.
+            // USDZ — the primary shareable artifact. Synchronous and
+            // CPU-bound; E.1.2 moves this onto a background task with
+            // the snapshot pre-extracted into Sendable data.
+            try USDZExporter.write(
+                snapshot: snapshot,
+                palette: palette,
+                to: writingDir.appendingPathComponent(ScanArtifact.usdz.filename))
+            artifacts.append(.usdz)
 
             if let thumbnail, let jpeg = thumbnail.jpegData(compressionQuality: 0.8) {
                 try jpeg.write(to: writingDir.appendingPathComponent(ScanArtifact.thumbnail.filename))
