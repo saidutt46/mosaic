@@ -44,6 +44,10 @@ enum USDZExporter {
         case unsupportedExportFormat   // ModelIO can't write usdz here
     }
 
+    /// Metres → centimetres. USD's default `metersPerUnit` is 0.01 and
+    /// ModelIO doesn't emit one, so we author in cm to land at real scale.
+    private static let unitScale: Float = 100
+
     /// Serialise `snapshot` to a USDZ at `url`. Synchronous and CPU-
     /// bound (0.5–3s for a room) — the caller must run it off the main
     /// actor. `palette` is indexed by `ARMeshClassification` raw value;
@@ -105,7 +109,12 @@ enum USDZExporter {
                         let worldPos = model * SIMD4<Float>(lp.x, lp.y, lp.z, 1)
                         let worldNrm = simd_normalize(normalMatrix * norms[Int(local)])
                         global = UInt32(positions[c].count)
-                        positions[c].append(SIMD3(worldPos.x, worldPos.y, worldPos.z))
+                        // ARKit gives metres, but ModelIO writes no USD
+                        // `metersPerUnit`, so consumers fall back to the USD
+                        // default of 0.01 (centimetres). Author in cm (×100)
+                        // so a 4 m room reads back as 4 m, not 4 cm (the
+                        // "matchbox in AR" bug).
+                        positions[c].append(SIMD3(worldPos.x, worldPos.y, worldPos.z) * Self.unitScale)
                         normals[c].append(worldNrm)
                         remap[c][local] = global
                     }

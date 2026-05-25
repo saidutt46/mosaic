@@ -29,6 +29,7 @@ struct ViewerControlButton: View {
                 }
             }
             .frame(width: 56, height: settings.showControlLabels ? 58 : 48)
+            .contentShape(Rectangle())
             .foregroundStyle(isActive ? MosaicColor.accent : .primary)
         }
         .buttonStyle(.plain)

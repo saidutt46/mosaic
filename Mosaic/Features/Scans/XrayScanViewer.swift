@@ -15,30 +15,29 @@ import QuickLook
 struct XrayScanViewer: View {
     let scan: Scan
 
-    private let showPointCloud = false
-
-    @State private var wireframe = false
+    @State private var cameraPreset: CameraPreset = .default
+    @State private var presetToken = 0
     @State private var resetToken = 0
     @State private var shareItem: ShareItem?
     @State private var previewURL: URL?
     @State private var showingInfo = false
+    @State private var showingPresets = false
+    @State private var isLoading = true
 
     private var meshURL: URL? { artifactURL(.usdz) }
-    private var pointCloudURL: URL? { artifactURL(.pointCloud) }
 
     var body: some View {
         ZStack {
-            Color(.secondarySystemBackground)
-                .ignoresSafeArea()
-
-            SceneKitModelView(
-                meshURL: meshURL,
-                pointCloudURL: pointCloudURL,
-                showPointCloud: showPointCloud,
-                wireframe: wireframe,
-                resetToken: resetToken
+            RealityModelView(
+                modelURL: meshURL,
+                preset: cameraPreset,
+                presetToken: presetToken,
+                resetToken: resetToken,
+                onLoaded: { isLoading = false }
             )
             .ignoresSafeArea(edges: .bottom)
+
+            if isLoading { loadingOverlay }
         }
         .overlay(alignment: .trailing) { controls }
         .navigationTitle(scan.name)
@@ -67,20 +66,31 @@ struct XrayScanViewer: View {
             }
         }
         .sheet(isPresented: $showingInfo) { ScanInfoSheet(scan: scan) }
+        .sheet(isPresented: $showingPresets) {
+            CameraPresetsSheet(current: cameraPreset) { preset in
+                cameraPreset = preset
+                presetToken &+= 1
+            }
+        }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         .quickLookPreview($previewURL)
     }
 
     // MARK: - Controls
 
+    private var loadingOverlay: some View {
+        VStack(spacing: MosaicSpacing.md) {
+            ProgressView()
+            Text("Loading scan…")
+                .font(MosaicFont.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var controls: some View {
         VStack(spacing: MosaicSpacing.md) {
-            ViewerControlButton(
-                title: "Mesh",
-                icon: "grid",
-                isActive: wireframe
-            ) {
-                withAnimation(MosaicMotion.snappy) { wireframe.toggle() }
+            ViewerControlButton(title: "Camera", icon: "rotate.3d") {
+                showingPresets = true
             }
 
             ViewerControlButton(title: "Reset", icon: "arrow.counterclockwise") {
