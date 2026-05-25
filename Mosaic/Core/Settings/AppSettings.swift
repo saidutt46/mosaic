@@ -51,6 +51,12 @@ final class AppSettings {
         didSet { defaults.set(appearance.rawValue, forKey: Keys.appearance) }
     }
 
+    /// Show text labels under the scan-viewer's floating controls.
+    /// Off by default — icon-only is the cleaner default.
+    var showControlLabels: Bool {
+        didSet { defaults.set(showControlLabels, forKey: Keys.showControlLabels) }
+    }
+
     // MARK: Init
 
     private let defaults: UserDefaults
@@ -59,11 +65,13 @@ final class AppSettings {
         self.defaults = defaults
         let raw = defaults.string(forKey: Keys.appearance) ?? AppearanceMode.system.rawValue
         self.appearance = AppearanceMode(rawValue: raw) ?? .system
+        self.showControlLabels = defaults.bool(forKey: Keys.showControlLabels)  // defaults to false
     }
 
     // MARK: Keys
 
     private enum Keys {
         static let appearance = "settings.appearance"
+        static let showControlLabels = "settings.showControlLabels"
     }
 }

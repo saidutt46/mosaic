@@ -17,6 +17,8 @@ struct SceneKitModelView: UIViewRepresentable {
     let meshURL: URL?
     let pointCloudURL: URL?
     let showPointCloud: Bool
+    /// Render the loaded mesh as a wireframe (material fillMode = .lines).
+    let wireframe: Bool
     /// Bump to re-frame the camera on the model.
     let resetToken: Int
 
@@ -36,10 +38,21 @@ struct SceneKitModelView: UIViewRepresentable {
         if context.coordinator.loadedPointCloud != showPointCloud {
             load(into: view, context: context)
         }
+        if context.coordinator.lastWireframe != wireframe {
+            context.coordinator.lastWireframe = wireframe
+            applyFillMode(to: view.scene)
+        }
         if context.coordinator.lastReset != resetToken {
             context.coordinator.lastReset = resetToken
             frame(view)
         }
+    }
+
+    static func dismantleUIView(_ view: SCNView, coordinator: Coordinator) {
+        // Stop the render loop and drop the scene so its geometry/textures
+        // are released promptly when the viewer is dismissed.
+        view.isPlaying = false
+        view.scene = nil
     }
 
     // MARK: - Loading
@@ -49,7 +62,19 @@ struct SceneKitModelView: UIViewRepresentable {
         view.scene = showPointCloud
             ? Self.pointCloudScene(pointCloudURL)
             : Self.meshScene(meshURL)
+        context.coordinator.lastWireframe = wireframe
+        applyFillMode(to: view.scene)
         frame(view)
+    }
+
+    /// Toggle solid ↔ wireframe by switching every material's fill mode.
+    /// Point clouds are left alone (no surfaces to wireframe).
+    private func applyFillMode(to scene: SCNScene?) {
+        guard let scene, !showPointCloud else { return }
+        let mode: SCNFillMode = wireframe ? .lines : .fill
+        scene.rootNode.enumerateHierarchy { node, _ in
+            node.geometry?.materials.forEach { $0.fillMode = mode }
+        }
     }
 
     private func frame(_ view: SCNView) {
@@ -87,6 +112,7 @@ struct SceneKitModelView: UIViewRepresentable {
 
     final class Coordinator {
         var loadedPointCloud = false
+        var lastWireframe = false
         var lastReset = 0
     }
 }

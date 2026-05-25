@@ -2,10 +2,11 @@
 //  XrayScanViewer.swift
 //  Mosaic
 //
-//  Detail viewer for a saved scan. Full-screen SceneKit model with a
-//  format toggle (mesh USDZ ↔ point cloud PLY), camera reset, an
-//  AR/QuickLook hand-off, and share. Floating Liquid-Glass controls
-//  over a neutral studio background.
+//  Detail viewer for a saved scan. Full-screen SceneKit model over a
+//  neutral studio background. Right-edge floating controls (mesh ↔
+//  solid, reset). Top bar: info + overflow menu (share + more). Bottom
+//  bar: AR/QuickLook. Point cloud is disabled in the viewer until the
+//  rendering pass is reworked.
 //
 
 import SwiftUI
@@ -14,14 +15,13 @@ import QuickLook
 struct XrayScanViewer: View {
     let scan: Scan
 
-    // Point cloud is disabled in the viewer until the rendering pass is
-    // reworked (points render black / intermittently; camera feels rigid).
-    // PLY is still exported; the SceneKit point path stays dormant.
     private let showPointCloud = false
 
+    @State private var wireframe = false
     @State private var resetToken = 0
     @State private var shareItem: ShareItem?
     @State private var previewURL: URL?
+    @State private var showingInfo = false
 
     private var meshURL: URL? { artifactURL(.usdz) }
     private var pointCloudURL: URL? { artifactURL(.pointCloud) }
@@ -35,6 +35,7 @@ struct XrayScanViewer: View {
                 meshURL: meshURL,
                 pointCloudURL: pointCloudURL,
                 showPointCloud: showPointCloud,
+                wireframe: wireframe,
                 resetToken: resetToken
             )
             .ignoresSafeArea(edges: .bottom)
@@ -45,12 +46,27 @@ struct XrayScanViewer: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    shareCurrent()
+                    showingInfo = true
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Image(systemName: "info.circle")
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                overflowMenu
+            }
+
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    previewURL = meshURL
+                } label: {
+                    Image(systemName: "arkit")
+                }
+                .disabled(meshURL == nil)
+                .accessibilityLabel("View in AR")
+            }
         }
+        .sheet(isPresented: $showingInfo) { ScanInfoSheet(scan: scan) }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         .quickLookPreview($previewURL)
     }
@@ -59,35 +75,38 @@ struct XrayScanViewer: View {
 
     private var controls: some View {
         VStack(spacing: MosaicSpacing.md) {
-            glassButton(title: "Reset", icon: "arrow.counterclockwise") {
-                resetToken &+= 1
+            ViewerControlButton(
+                title: "Mesh",
+                icon: "grid",
+                isActive: wireframe
+            ) {
+                withAnimation(MosaicMotion.snappy) { wireframe.toggle() }
             }
 
-            glassButton(title: "AR", icon: "arkit", isDisabled: meshURL == nil) {
-                previewURL = meshURL
+            ViewerControlButton(title: "Reset", icon: "arrow.counterclockwise") {
+                resetToken &+= 1
             }
         }
         .padding(.trailing, MosaicSpacing.lg)
     }
 
-    private func glassButton(title: String,
-                             icon: String,
-                             isDisabled: Bool = false,
-                             action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: MosaicSpacing.xxs) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
+    private var overflowMenu: some View {
+        Menu {
+            Button {
+                shareCurrent()
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
             }
-            .frame(width: 60, height: 60)
-            .foregroundStyle(.primary)
+            Section {
+                // Placeholders — wired up in a later pass.
+                Button {} label: { Label("Rename", systemImage: "pencil") }
+                    .disabled(true)
+                Button {} label: { Label("Add to Collection", systemImage: "folder.badge.plus") }
+                    .disabled(true)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular, in: .rect(cornerRadius: MosaicRadius.lg))
-        .opacity(isDisabled ? 0.4 : 1)
-        .disabled(isDisabled)
     }
 
     // MARK: - Actions

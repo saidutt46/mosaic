@@ -29,6 +29,16 @@ struct SettingsView: View {
                 Text("Appearance")
             }
 
+            Section {
+                Toggle(isOn: $settings.showControlLabels) {
+                    Label("Show control labels", systemImage: "textformat.size")
+                }
+            } header: {
+                Text("Viewer")
+            } footer: {
+                Text("Show text labels under the 3D viewer's floating controls.")
+            }
+
             Section("Debug") {
                 NavigationLink {
                     DesignGallery()
