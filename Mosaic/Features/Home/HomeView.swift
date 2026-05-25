@@ -16,15 +16,17 @@ private enum HomeRoute: Hashable {
     case filters
     case xray
     case library
+    case scanViewer(Scan)
 }
 
 struct HomeView: View {
     @State private var monitor = DeviceMonitor()
     @State private var showingSystemInfo = false
+    @State private var path: [HomeRoute] = []
     private let device = DeviceInfo.current()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: MosaicSpacing.xxl) {
                     greetingHeader
@@ -43,8 +45,14 @@ struct HomeView: View {
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
                 case .filters: FiltersView()
-                case .xray:    XrayView()
+                case .xray:
+                    XrayView { scan in
+                        // After saving, pop X-Ray and land on the scan's
+                        // detail viewer with Library beneath it.
+                        path = [.library, .scanViewer(scan)]
+                    }
                 case .library: ScanLibraryView()
+                case .scanViewer(let scan): XrayScanViewer(scan: scan)
                 }
             }
             .toolbar {

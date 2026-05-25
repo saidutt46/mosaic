@@ -22,6 +22,9 @@ import SwiftUI
 import os
 
 struct XrayView: View {
+    /// Called after a scan is saved — the host routes to its detail view.
+    var onComplete: (Scan) -> Void = { _ in }
+
     @Environment(\.dismiss) private var dismiss
     @State private var sessionManager = ARSessionManager()
     @State private var messages = ARMessages()
@@ -34,7 +37,8 @@ struct XrayView: View {
     @State private var scans = ScanRepository()
     @State private var isSaving = false
     @State private var pendingSave: PendingSave?
-    @State private var savingMessageID: UUID?
+    @State private var capturedThumbnail: UIImage?
+    @State private var showingSaveSheet = false
     @State private var captureTrigger: Int = 0
     @State private var showingClassification = false
     @State private var showingStats = false
@@ -121,21 +125,6 @@ struct XrayView: View {
 
             ToolbarItem(placement: .bottomBar) {
                 Button {
-                    handleSave()
-                } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "square.and.arrow.down")
-                    }
-                }
-                .disabled(stats.anchorCount == 0 || isSaving)
-                .accessibilityLabel("Save scan")
-            }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
                     captureTrigger &+= 1
                 } label: {
                     Image(systemName: "camera.fill")
@@ -156,6 +145,18 @@ struct XrayView: View {
                 }
                 .accessibilityLabel(meshFillMode == .filled ? "Switch to wireframe" : "Switch to filled")
             }
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            // Done — primary action, far right (filled/blue).
+            ToolbarItem(placement: .bottomBar) {
+                Button("Done") {
+                    handleDone()
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .disabled(stats.anchorCount == 0)
+                .accessibilityLabel("Done — review and save scan")
+            }
         }
         .sheet(isPresented: $showingClassification) {
             XrayClassificationSheet(
@@ -175,6 +176,15 @@ struct XrayView: View {
                 fps: stats.fps,
                 density: $meshDensity,
                 fresnelIntensity: $meshFresnelIntensity
+            )
+        }
+        .sheet(isPresented: $showingSaveSheet) {
+            SaveScanSheet(
+                stats: pendingSave?.stats ?? (anchors: 0, faces: 0, vertices: 0),
+                isSaving: isSaving,
+                onSave: performSave,
+                onClose: handleCloseSession,
+                onResume: handleResume
             )
         }
         .onAppear {
@@ -213,18 +223,16 @@ struct XrayView: View {
         let palette: [SIMD4<Float>]
     }
 
+    /// Done — snapshot the scan and request a composited frame; the
+    /// review sheet opens once that frame arrives in handleCapture.
     @MainActor
-    private func handleSave() {
+    private func handleDone() {
         let cache = sessionManager.meshCache
         let snapshot = cache.snapshot
         guard !snapshot.isEmpty else {
             messages.show("Nothing to save yet", kind: .warning)
             return
         }
-
-        // Capture everything at the moment of click, then request one
-        // composited frame for the thumbnail. The save itself runs once
-        // that frame arrives in handleCapture.
         pendingSave = PendingSave(
             snapshot: snapshot,
             stats: (anchors: cache.anchorCount,
@@ -232,38 +240,63 @@ struct XrayView: View {
                     vertices: cache.totalVertexCount),
             palette: classificationStyles.palette
         )
-        isSaving = true
-        savingMessageID = messages.pin("Saving scan…", icon: "square.and.arrow.down")
         captureTrigger &+= 1
     }
 
+    /// Commit the pending scan. On success, hand the saved scan to the
+    /// host so it can route to the detail viewer.
     @MainActor
-    private func performSave(_ pending: PendingSave, thumbnail: UIImage?) {
+    private func performSave() {
+        guard let pending = pendingSave else { return }
+        isSaving = true
         Task {
             defer { isSaving = false }
             do {
-                try await scans.save(snapshot: pending.snapshot,
-                                     stats: pending.stats,
-                                     palette: pending.palette,
-                                     thumbnail: thumbnail)
-                savingMessageID.map { messages.dismiss($0) }
-                messages.show("Scan saved", kind: .success)
+                let scan = try await scans.save(snapshot: pending.snapshot,
+                                                stats: pending.stats,
+                                                palette: pending.palette,
+                                                thumbnail: capturedThumbnail)
+                showingSaveSheet = false
+                clearPending()
+                onComplete(scan)
             } catch {
-                savingMessageID.map { messages.dismiss($0) }
                 messages.show("Couldn't save scan", kind: .error)
                 Log.app.error("scan save (ui): \(error.localizedDescription, privacy: .public)")
             }
         }
     }
 
+    /// Discard the session entirely — nothing was written yet.
+    @MainActor
+    private func handleCloseSession() {
+        showingSaveSheet = false
+        clearPending()
+        dismiss()
+    }
+
+    /// Keep scanning — resume the paused session, drop the snapshot.
+    @MainActor
+    private func handleResume() {
+        showingSaveSheet = false
+        clearPending()
+        sessionManager.resumeFromReview()
+    }
+
+    private func clearPending() {
+        pendingSave = nil
+        capturedThumbnail = nil
+    }
+
     // MARK: - Capture handling
 
     @MainActor
     private func handleCapture(_ image: UIImage?) {
-        // A save in flight claims the captured frame as its thumbnail.
-        if let pending = pendingSave {
-            pendingSave = nil
-            performSave(pending, thumbnail: image.map { Self.thumbnail(from: $0) })
+        // Finishing a scan: grab the composited frame as the thumbnail,
+        // freeze the session, and open the review sheet.
+        if pendingSave != nil {
+            capturedThumbnail = image.map { Self.thumbnail(from: $0) }
+            sessionManager.pauseForReview()
+            showingSaveSheet = true
             return
         }
         guard let image else {

@@ -55,6 +55,10 @@ final class ARSessionManager: NSObject {
 
     @ObservationIgnored private var summaryTask: Task<Void, Never>?
 
+    /// The configuration last run, kept so we can resume after a review
+    /// pause without resetting tracking or dropping the captured mesh.
+    @ObservationIgnored private var currentConfig: ARConfiguration?
+
     private static let summaryInterval: TimeInterval = 2.0
 
     override init() {
@@ -98,6 +102,7 @@ final class ARSessionManager: NSObject {
         }
 
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
+        currentConfig = config
         isRunning = true
         Log.ar.info("ARSession started · \(self.direction.rawValue, privacy: .public)")
 
@@ -151,6 +156,28 @@ final class ARSessionManager: NSObject {
         meshCache.reset()
         didShowReady = false
         Log.ar.info("ARSession paused")
+    }
+
+    /// Freeze the session for the save-review sheet WITHOUT discarding
+    /// the captured mesh. Unlike `stop()`, the stats + buffer cache stay
+    /// intact so a `resumeFromReview()` (or a save) sees the same scan.
+    func pauseForReview() {
+        guard isRunning else { return }
+        summaryTask?.cancel()
+        summaryTask = nil
+        session.pause()
+        isRunning = false
+        Log.ar.info("ARSession paused for review")
+    }
+
+    /// Resume after a review pause, re-running the stored configuration
+    /// with no reset options so existing anchors/tracking carry over.
+    func resumeFromReview() {
+        guard !isRunning, let config = currentConfig else { return }
+        session.run(config, options: [])
+        isRunning = true
+        startSummaryLoop()
+        Log.ar.info("ARSession resumed from review")
     }
 
     // MARK: - Rolling summary
