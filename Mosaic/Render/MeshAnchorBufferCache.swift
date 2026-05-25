@@ -26,7 +26,13 @@ import os
 /// MTLBuffers, plus the anchor's world transform. Indices and
 /// classifications are present whenever ARKit provides them
 /// (classification requires `.meshWithClassification` config).
-struct MeshAnchorBuffers {
+///
+/// `@unchecked Sendable`: every buffer is owned, `.storageModeShared`,
+/// and immutable once built — the cache replaces entries wholesale,
+/// never mutates buffer contents. A `snapshot` array therefore holds
+/// strong refs to frozen buffers, safe to read from a background task
+/// (e.g. USDZ export) concurrently with the renderer's GPU reads.
+struct MeshAnchorBuffers: @unchecked Sendable {
     let identifier: UUID
     var transform: simd_float4x4
 

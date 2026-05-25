@@ -78,13 +78,14 @@ final class ScanRepository {
         do {
             var artifacts: [ScanArtifact] = [.manifest]
 
-            // USDZ — the primary shareable artifact. Synchronous and
-            // CPU-bound; E.1.2 moves this onto a background task with
-            // the snapshot pre-extracted into Sendable data.
-            try USDZExporter.write(
-                snapshot: snapshot,
-                palette: palette,
-                to: writingDir.appendingPathComponent(ScanArtifact.usdz.filename))
+            // USDZ — the primary shareable artifact. CPU-bound
+            // (0.5–3s); run off the main actor. The snapshot's buffers
+            // are immutable shared-storage (MeshAnchorBuffers is
+            // Sendable), so reading them from a detached task is safe.
+            let usdzURL = writingDir.appendingPathComponent(ScanArtifact.usdz.filename)
+            try await Task.detached(priority: .userInitiated) {
+                try USDZExporter.write(snapshot: snapshot, palette: palette, to: usdzURL)
+            }.value
             artifacts.append(.usdz)
 
             if let thumbnail, let jpeg = thumbnail.jpegData(compressionQuality: 0.8) {

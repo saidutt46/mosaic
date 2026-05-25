@@ -11,13 +11,11 @@
 //  No filter strip, no camera flip (mesh anchors are tied to the
 //  back camera + LiDAR). Chrome focuses on mesh interaction:
 //
-//   - Toolbar leading:  close (X)
-//   - Toolbar trailing: fill-mode toggle (wireframe ↔ filled)
-//   - Bottom bar leading:  capture
-//   - Bottom bar trailing: palette (stub sheet for B.4.x)
+//   - Top bar:    close (X) · mesh-stats capsule
+//   - Bottom bar: presets · classification · save · capture · fill-mode
 //
-//  Future polish: FPS HUD, anchor / triangle count badge, palette
-//  picker proper, mesh on/off, scan-line / Fresnel styles.
+//  Save (square.and.arrow.down) snapshots the current mesh to a USDZ
+//  scan via ScanRepository; disabled until the mesh has anchors.
 //
 
 import SwiftUI
@@ -33,6 +31,8 @@ struct XrayView: View {
     @State private var meshFresnelIntensity: Float = 0.0
     @State private var meshOpacity: Float = 0.55
     @State private var classificationStyles = ClassificationStyles()
+    @State private var scans = ScanRepository()
+    @State private var isSaving = false
     @State private var captureTrigger: Int = 0
     @State private var showingClassification = false
     @State private var showingStats = false
@@ -87,11 +87,14 @@ struct XrayView: View {
                     showingStats = true
                 }
             }
-
-            // MARK: Bottom bar — leading area reserved for future
-            // option groups (density, opacity, effects). Right
-            // cluster keeps the action controls: palette · capture
-            // · fill-mode toggle.
+        }
+        // Bottom bar kept in its own .toolbar — the ToolbarContentBuilder
+        // caps at 10 elements, and the separate-pill layout (spacers
+        // between each item) puts this cluster right at that limit.
+        .toolbar {
+            // MARK: Bottom bar — action cluster: presets · classification
+            // · save · capture · fill-mode. Spacers render each as its
+            // own Liquid Glass pill.
             ToolbarSpacer(.flexible, placement: .bottomBar)
 
             ToolbarItem(placement: .bottomBar) {
@@ -111,6 +114,21 @@ struct XrayView: View {
                     Image(systemName: "paintpalette.fill")
                 }
                 .accessibilityLabel("Classification")
+            }
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+
+            ToolbarItem(placement: .bottomBar) {
+                Button {
+                    handleSave()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                }
+                .disabled(stats.anchorCount == 0 || isSaving)
+                .accessibilityLabel("Save scan")
             }
             ToolbarSpacer(.fixed, placement: .bottomBar)
 
@@ -180,6 +198,43 @@ struct XrayView: View {
             meshOpacity = preset.opacity
             meshFresnelIntensity = preset.fresnelIntensity
             preset.apply(to: classificationStyles)
+        }
+    }
+
+    // MARK: - Save handling
+
+    @MainActor
+    private func handleSave() {
+        let cache = sessionManager.meshCache
+        let snapshot = cache.snapshot
+        guard !snapshot.isEmpty else {
+            messages.show("Nothing to save yet", kind: .warning)
+            return
+        }
+
+        // Snapshot stats + palette at the moment of click.
+        let stats = (anchors: cache.anchorCount,
+                     faces: cache.totalFaceCount,
+                     vertices: cache.totalVertexCount)
+        let palette = classificationStyles.palette
+
+        isSaving = true
+        let savingID = messages.pin("Saving scan…", icon: "square.and.arrow.down")
+
+        Task {
+            defer { isSaving = false }
+            do {
+                try await scans.save(snapshot: snapshot,
+                                     stats: stats,
+                                     palette: palette,
+                                     thumbnail: nil)   // captured in E.1.3
+                messages.dismiss(savingID)
+                messages.show("Scan saved", kind: .success)
+            } catch {
+                messages.dismiss(savingID)
+                messages.show("Couldn't save scan", kind: .error)
+                Log.app.error("scan save (ui): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
