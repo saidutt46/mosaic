@@ -15,6 +15,7 @@ import SwiftUI
 private enum HomeRoute: Hashable {
     case filters
     case xray
+    case library
 }
 
 struct HomeView: View {
@@ -43,6 +44,7 @@ struct HomeView: View {
                 switch route {
                 case .filters: FiltersView()
                 case .xray:    XrayView()
+                case .library: ScanLibraryView()
                 }
             }
             .toolbar {
@@ -123,6 +125,14 @@ struct HomeView: View {
                 tint: .green,
                 state: .unavailable("Soon"),
                 destination: nil
+            )
+            QuickActionTile(
+                title: "Library",
+                subtitle: "Saved scans",
+                icon: "square.stack.3d.up.fill",
+                tint: .teal,
+                state: .available,
+                destination: .library
             )
             QuickActionTile(
                 title: "Capture",

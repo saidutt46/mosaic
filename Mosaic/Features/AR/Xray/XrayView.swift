@@ -33,6 +33,8 @@ struct XrayView: View {
     @State private var classificationStyles = ClassificationStyles()
     @State private var scans = ScanRepository()
     @State private var isSaving = false
+    @State private var pendingSave: PendingSave?
+    @State private var savingMessageID: UUID?
     @State private var captureTrigger: Int = 0
     @State private var showingClassification = false
     @State private var showingStats = false
@@ -203,6 +205,14 @@ struct XrayView: View {
 
     // MARK: - Save handling
 
+    /// Snapshot taken at the moment of the Save tap. Held while we wait
+    /// one frame for the thumbnail capture to come back.
+    private struct PendingSave {
+        let snapshot: [MeshAnchorBuffers]
+        let stats: (anchors: Int, faces: Int, vertices: Int)
+        let palette: [SIMD4<Float>]
+    }
+
     @MainActor
     private func handleSave() {
         let cache = sessionManager.meshCache
@@ -212,26 +222,34 @@ struct XrayView: View {
             return
         }
 
-        // Snapshot stats + palette at the moment of click.
-        let stats = (anchors: cache.anchorCount,
-                     faces: cache.totalFaceCount,
-                     vertices: cache.totalVertexCount)
-        let palette = classificationStyles.palette
-
+        // Capture everything at the moment of click, then request one
+        // composited frame for the thumbnail. The save itself runs once
+        // that frame arrives in handleCapture.
+        pendingSave = PendingSave(
+            snapshot: snapshot,
+            stats: (anchors: cache.anchorCount,
+                    faces: cache.totalFaceCount,
+                    vertices: cache.totalVertexCount),
+            palette: classificationStyles.palette
+        )
         isSaving = true
-        let savingID = messages.pin("Saving scan…", icon: "square.and.arrow.down")
+        savingMessageID = messages.pin("Saving scan…", icon: "square.and.arrow.down")
+        captureTrigger &+= 1
+    }
 
+    @MainActor
+    private func performSave(_ pending: PendingSave, thumbnail: UIImage?) {
         Task {
             defer { isSaving = false }
             do {
-                try await scans.save(snapshot: snapshot,
-                                     stats: stats,
-                                     palette: palette,
-                                     thumbnail: nil)   // captured in E.1.3
-                messages.dismiss(savingID)
+                try await scans.save(snapshot: pending.snapshot,
+                                     stats: pending.stats,
+                                     palette: pending.palette,
+                                     thumbnail: thumbnail)
+                savingMessageID.map { messages.dismiss($0) }
                 messages.show("Scan saved", kind: .success)
             } catch {
-                messages.dismiss(savingID)
+                savingMessageID.map { messages.dismiss($0) }
                 messages.show("Couldn't save scan", kind: .error)
                 Log.app.error("scan save (ui): \(error.localizedDescription, privacy: .public)")
             }
@@ -242,6 +260,12 @@ struct XrayView: View {
 
     @MainActor
     private func handleCapture(_ image: UIImage?) {
+        // A save in flight claims the captured frame as its thumbnail.
+        if let pending = pendingSave {
+            pendingSave = nil
+            performSave(pending, thumbnail: image.map { Self.thumbnail(from: $0) })
+            return
+        }
         guard let image else {
             messages.show("Capture failed", kind: .error)
             return
@@ -260,5 +284,16 @@ struct XrayView: View {
                 messages.show("Couldn't save photo", kind: .error)
             }
         }
+    }
+
+    /// Downscale the full-res composited frame to a library thumbnail.
+    private static func thumbnail(from image: UIImage, maxDimension: CGFloat = 512) -> UIImage {
+        let longest = max(image.size.width, image.size.height)
+        guard longest > maxDimension else { return image }
+        let scale = maxDimension / longest
+        let size = CGSize(width: image.size.width * scale,
+                          height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
     }
 }
