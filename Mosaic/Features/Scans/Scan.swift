@@ -12,7 +12,7 @@ import Foundation
 
 // MARK: - Scan
 
-struct Scan: Identifiable, Codable, Equatable {
+struct Scan: Identifiable, Codable, Equatable, Hashable {
     let id: UUID
     var name: String                    // e.g. "Scan 2026-05-24 10:42"
     let createdAt: Date

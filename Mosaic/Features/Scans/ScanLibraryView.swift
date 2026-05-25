@@ -13,8 +13,9 @@ import QuickLook
 
 struct ScanLibraryView: View {
     @State private var repo = ScanRepository()
-    @State private var previewURL: URL?
+    @State private var selectedScan: Scan?
     @State private var shareItem: ShareItem?
+    @State private var scanToDelete: Scan?
 
     private let columns = [
         GridItem(.adaptive(minimum: 150, maximum: 200), spacing: MosaicSpacing.lg)
@@ -35,9 +36,9 @@ struct ScanLibraryView: View {
                             ScanCard(
                                 scan: scan,
                                 thumbnailURL: repo.openURL(for: scan.id, artifact: .thumbnail),
-                                onTap: { previewURL = repo.openURL(for: scan.id, artifact: .usdz) },
+                                onTap: { selectedScan = scan },
                                 onShare: { share(scan) },
-                                onDelete: { delete(scan.id) }
+                                onDelete: { scanToDelete = scan }
                             )
                         }
                     }
@@ -50,14 +51,25 @@ struct ScanLibraryView: View {
         .navigationTitle("Library")
         .navigationBarTitleDisplayMode(.large)
         .task { await repo.reload() }
-        .quickLookPreview($previewURL)
+        .navigationDestination(item: $selectedScan) { XrayScanViewer(scan: $0) }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
+        .alert(
+            "Delete Scan?",
+            isPresented: Binding(get: { scanToDelete != nil },
+                                 set: { if !$0 { scanToDelete = nil } }),
+            presenting: scanToDelete
+        ) { scan in
+            Button("Delete", role: .destructive) { delete(scan.id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { scan in
+            Text("“\(scan.name)” and its files will be permanently deleted. This can’t be undone.")
+        }
     }
 
     private func share(_ scan: Scan) {
-        if let url = repo.openURL(for: scan.id, artifact: .usdz) {
-            shareItem = ShareItem(url: url)
-        }
+        guard let source = repo.openURL(for: scan.id, artifact: .usdz),
+              let shareURL = ShareFile.prepared(from: source, named: scan.name) else { return }
+        shareItem = ShareItem(url: shareURL)
     }
 
     private func delete(_ id: UUID) {
