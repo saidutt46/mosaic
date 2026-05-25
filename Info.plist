@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Partial Info.plist: keys Xcode's INFOPLIST_KEY_ generator can't
+	     emit. UIFileSharingEnabled is NOT on Xcode's generatable-key
+	     allowlist, so it must live in a real file. Both keys are needed
+	     for the Documents/Scans folder to appear under "On My iPhone" in
+	     the Files app. GENERATE_INFOPLIST_FILE=YES merges the remaining
+	     generated keys on top of this. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>

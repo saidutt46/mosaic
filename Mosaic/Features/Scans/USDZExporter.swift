@@ -34,6 +34,7 @@ import ModelIO
 import MetalKit
 import ARKit
 import simd
+import CoreGraphics
 import os
 
 enum USDZExporter {
@@ -52,7 +53,12 @@ enum USDZExporter {
                       density: MeshDensity = .full,
                       to url: URL) throws {
 
-        guard MDLAsset.canExportFileExtension(url.pathExtension) else {
+        // ModelIO can write binary USD (.usdc) on iOS but NOT the zipped
+        // .usdz wrapper (verified at runtime — iOS exports usdc/usda/usd/
+        // obj/ply/stl/abc only). So we export .usdc, then package it into
+        // a .usdz ourselves (USDZ = an uncompressed, 64-byte-aligned zip).
+        guard MDLAsset.canExportFileExtension("usdc") else {
+            Log.app.error("usdz export: ModelIO cannot export usdc on this OS")
             throw ExportError.unsupportedExportFormat
         }
 
@@ -130,8 +136,19 @@ enum USDZExporter {
 
         guard asset.count > 0 else { throw ExportError.emptyMesh }
 
-        try asset.export(to: url)
-        Log.app.info("usdz export: \(asset.count) class mesh(es) → \(url.lastPathComponent, privacy: .public)")
+        // ModelIO writes the USD layer; we wrap it as USDZ. The inner
+        // file keeps the .usdc name matching the scan's artifact stem.
+        let innerName = url.deletingPathExtension().appendingPathExtension("usdc").lastPathComponent
+        let usdcURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("usdc")
+        defer { try? FileManager.default.removeItem(at: usdcURL) }
+
+        try asset.export(to: usdcURL)
+        let usdcData = try Data(contentsOf: usdcURL)
+        try USDZArchive.write(usdData: usdcData, innerName: innerName, to: url)
+
+        Log.app.info("usdz export: \(asset.count) class mesh(es), \(usdcData.count) usdc bytes → \(url.lastPathComponent, privacy: .public)")
     }
 
     // MARK: - Mesh construction
@@ -188,17 +205,20 @@ enum USDZExporter {
     private static func material(forClass c: Int,
                                  palette: [SIMD4<Float>]) -> MDLMaterial {
         let color = c < palette.count ? palette[c] : SIMD4<Float>(0.5, 0.5, 0.5, 1)
-        let material = MDLMaterial(
-            name: ARMeshClassification.allKnown[c].label,
-            scatteringFunction: MDLPhysicallyPlausibleScatteringFunction()
-        )
-        material.setProperty(MDLMaterialProperty(
-            name: "baseColor", semantic: .baseColor,
-            float3: SIMD3(color.x, color.y, color.z)))
-        material.setProperty(MDLMaterialProperty(
-            name: "roughness", semantic: .roughness, float: 0.85))
-        material.setProperty(MDLMaterialProperty(
-            name: "metallic", semantic: .metallic, float: 0.0))
-        return material
+
+        // baseColor MUST be a CGColor: that makes ModelIO emit a USD
+        // *color* type (color4f) for diffuseColor. A plain float3 is not
+        // a color-role type, so QuickLook / RealityKit ignore it and the
+        // model renders default gray.
+        let scatter = MDLPhysicallyPlausibleScatteringFunction()
+        scatter.baseColor.color = CGColor(srgbRed: CGFloat(color.x),
+                                          green: CGFloat(color.y),
+                                          blue: CGFloat(color.z),
+                                          alpha: CGFloat(color.w))
+        scatter.metallic.floatValue = 0
+        scatter.roughness.floatValue = 0.85
+
+        return MDLMaterial(name: ARMeshClassification.allKnown[c].label,
+                           scatteringFunction: scatter)
     }
 }
