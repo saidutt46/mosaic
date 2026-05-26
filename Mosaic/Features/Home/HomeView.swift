@@ -333,12 +333,12 @@ private func capabilityRow(_ label: String, _ available: Bool, icon: String) -> 
 
 #Preview("Home · Light") {
     HomeView()
-        .environment(AppSettings())
+        .environment(AppServices())
         .preferredColorScheme(.light)
 }
 
 #Preview("Home · Dark") {
     HomeView()
-        .environment(AppSettings())
+        .environment(AppServices())
         .preferredColorScheme(.dark)
 }

@@ -10,7 +10,8 @@
 import SwiftUI
 
 struct ViewerControlButton: View {
-    @Environment(AppSettings.self) private var settings
+    @Environment(AppServices.self) private var services
+    private var settings: AppSettings { services.settings }
 
     let title: String
     let icon: String

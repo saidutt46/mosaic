@@ -34,7 +34,8 @@ struct XrayView: View {
     @State private var meshFresnelIntensity: Float = 0.0
     @State private var meshOpacity: Float = 0.55
     @State private var classificationStyles = ClassificationStyles()
-    @State private var scans = ScanRepository()
+    @Environment(AppServices.self) private var services
+    private var scans: ScanRepository { services.scans }
     @State private var isSaving = false
     @State private var pendingSave: PendingSave?
     @State private var capturedThumbnail: UIImage?

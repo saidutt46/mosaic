@@ -17,5 +17,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .environment(AppSettings())
+        .environment(AppServices())
 }

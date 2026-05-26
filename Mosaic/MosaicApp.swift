@@ -8,7 +8,7 @@ import os
 
 @main
 struct MosaicApp: App {
-    @State private var settings = AppSettings()
+    @State private var services = AppServices()
 
     init() {
         Log.app.info("Mosaic launched · v\(AboutInfo.versionString, privacy: .public)")
@@ -17,8 +17,8 @@ struct MosaicApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(settings)
-                .preferredColorScheme(settings.appearance.colorScheme)
+                .environment(services)
+                .preferredColorScheme(services.settings.appearance.colorScheme)
         }
     }
 }

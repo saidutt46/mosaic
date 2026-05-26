@@ -9,11 +9,11 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(AppSettings.self) private var settings
+    @Environment(AppServices.self) private var services
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        @Bindable var settings = settings
+        @Bindable var settings = services.settings
 
         Form {
             Section {
@@ -91,12 +91,12 @@ enum AboutInfo {
 
 #Preview("Settings · Light") {
     NavigationStack { SettingsView() }
-        .environment(AppSettings())
+        .environment(AppServices())
         .preferredColorScheme(.light)
 }
 
 #Preview("Settings · Dark") {
     NavigationStack { SettingsView() }
-        .environment(AppSettings())
+        .environment(AppServices())
         .preferredColorScheme(.dark)
 }
