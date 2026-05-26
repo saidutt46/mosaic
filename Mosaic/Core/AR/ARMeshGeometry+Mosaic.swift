@@ -44,6 +44,14 @@ extension ARMeshClassification {
         }
     }
 
+    /// User-facing name for UI lists/legends. Mirrors `label` except
+    /// `.none`, which reads as "Unclassified" rather than "None".
+    /// (Keep `label` as the lowercase key — the viewer matches mesh
+    /// entities by it.)
+    var displayName: String {
+        self == .none ? "Unclassified" : label.capitalized
+    }
+
     /// All 8 cases ARKit currently emits, in raw-value order.
     static let allKnown: [ARMeshClassification] = [
         .none, .wall, .floor, .ceiling, .table, .seat, .window, .door,

@@ -20,6 +20,9 @@ struct XrayScanViewer: View {
     @State private var cameraPreset: CameraPreset = .default
     @State private var showingRename = false
     @State private var renameText = ""
+    @State private var classificationStyles = ClassificationStyles()
+    @State private var meshOpacity: Float = 1.0
+    @State private var showingLayers = false
     @State private var presetToken = 0
     @State private var resetToken = 0
     @State private var shareItem: ShareItem?
@@ -41,6 +44,9 @@ struct XrayScanViewer: View {
                 preset: cameraPreset,
                 presetToken: presetToken,
                 resetToken: resetToken,
+                palette: classificationStyles.palette,
+                visibilityMask: classificationStyles.visibilityMask,
+                opacity: meshOpacity,
                 onLoaded: { isLoading = false }
             )
             .ignoresSafeArea()
@@ -88,6 +94,9 @@ struct XrayScanViewer: View {
                 presetToken &+= 1
             }
         }
+        .sheet(isPresented: $showingLayers) {
+            XrayClassificationSheet(styles: classificationStyles, opacity: $meshOpacity)
+        }
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
         .quickLookPreview($previewURL)
     }
@@ -105,6 +114,10 @@ struct XrayScanViewer: View {
 
     private var controls: some View {
         VStack(spacing: MosaicSpacing.md) {
+            ViewerControlButton(title: "Layers", icon: "square.3.layers.3d") {
+                showingLayers = true
+            }
+
             ViewerControlButton(title: "Camera", icon: "camera.aperture") {
                 showingPresets = true
             }

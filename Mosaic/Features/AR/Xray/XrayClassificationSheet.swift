@@ -39,7 +39,7 @@ struct XrayClassificationSheet: View {
                                 .labelsHidden()
                                 .fixedSize()
 
-                            Text(entry.classification.label.capitalized)
+                            Text(entry.classification.displayName)
                                 .font(MosaicFont.body)
 
                             Spacer()

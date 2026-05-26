@@ -16,6 +16,7 @@
 
 import SwiftUI
 import RealityKit
+import ARKit
 
 struct RealityModelView: UIViewRepresentable {
     let modelURL: URL?
@@ -24,6 +25,12 @@ struct RealityModelView: UIViewRepresentable {
     let presetToken: Int
     /// Bump to fully reset to the default angle + framing.
     let resetToken: Int
+    /// Per-class colours (indexed by ARMeshClassification raw value).
+    let palette: [SIMD4<Float>]
+    /// Bit N set ⇒ class N visible.
+    let visibilityMask: UInt32
+    /// Whole-model opacity (0…1).
+    let opacity: Float
     /// Called on the main actor once the model finishes loading (or fails).
     var onLoaded: () -> Void = {}
 
@@ -33,12 +40,14 @@ struct RealityModelView: UIViewRepresentable {
         let arView = ARView(frame: .zero, cameraMode: .nonAR, automaticallyConfigureSession: false)
         arView.environment.background = .color(.secondarySystemBackground)
         context.coordinator.install(on: arView)
+        context.coordinator.setStyle(palette: palette, mask: visibilityMask, opacity: opacity)
         context.coordinator.load(modelURL)
         return arView
     }
 
     func updateUIView(_ arView: ARView, context: Context) {
         let c = context.coordinator
+        c.setStyle(palette: palette, mask: visibilityMask, opacity: opacity)
         if c.lastResetToken != resetToken {
             c.lastResetToken = resetToken
             c.reset()
@@ -72,6 +81,15 @@ struct RealityModelView: UIViewRepresentable {
 
         var lastPresetToken = 0
         var lastResetToken = 0
+
+        // Layers — per-class entities (keyed by classification label) +
+        // the loaded model root for opacity. Style is stored so it can
+        // be (re)applied both on change and once the model loads.
+        private var classEntities: [String: Entity] = [:]
+        private var modelRoot: Entity?
+        private var palette: [SIMD4<Float>] = []
+        private var visibilityMask: UInt32 = 0xFF
+        private var opacity: Float = 1
 
         private static let fovDegrees: Float = 55
         private static let framingFactor: Float = 1.05   // smaller = camera closer
@@ -141,6 +159,14 @@ struct RealityModelView: UIViewRepresentable {
                 let anchor = AnchorEntity(world: .zero)
                 anchor.addChild(entity)
                 arView.scene.addAnchor(anchor)
+                modelRoot = entity
+
+                // Our USDZ has one mesh per classification, named by label.
+                classEntities = [:]
+                for c in ARMeshClassification.allKnown {
+                    if let e = entity.findEntity(named: c.label) { classEntities[c.label] = e }
+                }
+                applyStyle()
 
                 let bounds = entity.visualBounds(relativeTo: nil)
                 defaultCenter = bounds.center
@@ -151,6 +177,44 @@ struct RealityModelView: UIViewRepresentable {
                 maxDistance = defaultDistance * 4
                 reset()
             }
+        }
+
+        // MARK: Layers / style
+
+        func setStyle(palette: [SIMD4<Float>], mask: UInt32, opacity: Float) {
+            guard palette != self.palette || mask != visibilityMask || opacity != self.opacity else { return }
+            self.palette = palette
+            self.visibilityMask = mask
+            self.opacity = opacity
+            applyStyle()
+        }
+
+        private func applyStyle() {
+            guard !classEntities.isEmpty else { return }   // model not loaded yet
+            for (index, c) in ARMeshClassification.allKnown.enumerated() {
+                guard let entity = classEntities[c.label] else { continue }
+                entity.isEnabled = (visibilityMask & (1 << UInt32(index))) != 0
+                if index < palette.count { recolor(entity, palette[index]) }
+            }
+            if let modelRoot {
+                modelRoot.components.set(OpacityComponent(opacity: opacity))
+            }
+        }
+
+        /// Re-tint every ModelComponent at or under `entity`.
+        private func recolor(_ entity: Entity, _ rgba: SIMD4<Float>) {
+            let color = UIColor(red: CGFloat(rgba.x), green: CGFloat(rgba.y),
+                                blue: CGFloat(rgba.z), alpha: 1)
+            let material = SimpleMaterial(color: color, roughness: 0.9, isMetallic: false)
+            applyMaterial(material, to: entity)
+        }
+
+        private func applyMaterial(_ material: SimpleMaterial, to entity: Entity) {
+            if var model = entity.components[ModelComponent.self] {
+                model.materials = Array(repeating: material, count: max(model.materials.count, 1))
+                entity.components.set(model)
+            }
+            for child in entity.children { applyMaterial(material, to: child) }
         }
 
         func apply(_ preset: CameraPreset) {
@@ -229,9 +293,12 @@ struct RealityModelView: UIViewRepresentable {
         }
 
         func cleanup() {
+            animator.cancel()
             arView?.scene.anchors.removeAll()
             arView = nil
             camera = nil
+            modelRoot = nil
+            classEntities = [:]
         }
     }
 }
