@@ -50,6 +50,7 @@ struct FiltersView: View {
                 meshOpacity: 1.0,                                // ignored
                 meshPalette: MeshOverlayPass.defaultPalette,     // ignored
                 meshClassVisibilityMask: MeshOverlayPass.defaultVisibilityMask, // ignored
+                meshVisualizationMode: .classification,          // ignored
                 captureTrigger: captureTrigger,
                 onCapture: handleCapture
             )

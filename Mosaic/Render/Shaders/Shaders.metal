@@ -435,6 +435,9 @@ struct MeshUniforms {
     float scanLineIntensity;     // 0..1
     uint  densityStride;         // 1 = all, 2 = every other, 4 = quarter, 8 = sparse
     uint  classVisibilityMask;   // bit N set ⇒ ARMeshClassification.rawValue N drawn
+    uint  visualizationMode;     // 0 = classification, 1 = density
+    float densityLogMin;         // log2(area) → ramp 0 (dense / well-scanned)
+    float densityLogMax;         // log2(area) → ramp 1 (sparse)
 };
 
 // MARK: - Mesh fragment (B.3 — per-class colour + effects)
@@ -456,7 +459,8 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
                               uint primitiveID        [[primitive_id]],
                               constant uchar         *classifications [[buffer(0)]],
                               constant float4        *palette         [[buffer(1)]],
-                              constant MeshUniforms  &uniforms        [[buffer(2)]]) {
+                              constant MeshUniforms  &uniforms        [[buffer(2)]],
+                              constant float         *faceAreas       [[buffer(3)]]) {
     // Density discard — early exit before the palette lookup.
     if (uniforms.densityStride > 1 &&
         (primitiveID % uniforms.densityStride) != 0) {
@@ -470,6 +474,21 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
     // don't occlude objects behind them.
     if ((uniforms.classVisibilityMask & (1u << classIndex)) == 0u) {
         discard_fragment();
+    }
+
+    // Density mode — colour by triangle area as a scan-quality proxy.
+    // Small faces (dense, well-scanned) → green; large faces (sparse)
+    // → red, through a green→yellow→red ramp.
+    if (uniforms.visualizationMode == 1u) {
+        float logArea = log2(max(faceAreas[primitiveID], 1e-9));
+        float t = saturate((logArea - uniforms.densityLogMin) /
+                           (uniforms.densityLogMax - uniforms.densityLogMin));
+        float3 dense  = float3(0.20, 0.78, 0.35);  // green
+        float3 mid    = float3(1.00, 0.80, 0.00);  // yellow
+        float3 sparse = float3(1.00, 0.23, 0.19);  // red
+        float3 rgb = (t < 0.5) ? mix(dense, mid, t * 2.0)
+                               : mix(mid, sparse, (t - 0.5) * 2.0);
+        return float4(rgb, uniforms.alpha);
     }
 
     float4 color = palette[classIndex];

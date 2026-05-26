@@ -114,6 +114,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         meshOverlayPass.classVisibilityMask = mask
     }
 
+    func setMeshVisualizationMode(_ mode: MeshVisualizationMode) {
+        meshOverlayPass.visualizationMode = mode
+    }
+
     // MARK: - Capture
 
     /// Schedule a one-shot snapshot of the currently rendered

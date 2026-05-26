@@ -11,11 +11,11 @@
 //  No filter strip, no camera flip (mesh anchors are tied to the
 //  back camera + LiDAR). Chrome focuses on mesh interaction:
 //
-//   - Top bar:    close (X) · mesh-stats capsule
-//   - Bottom bar: presets · classification · save · capture · fill-mode
-//
-//  Save (square.and.arrow.down) snapshots the current mesh to a USDZ
-//  scan via ScanRepository; disabled until the mesh has anchors.
+//   - Top bar:     close (X) · mesh-stats capsule
+//   - Right HUD:   density · presets · classes · photo · fill-mode
+//                  (ViewerControlButton glass cluster; active toggles
+//                   tint accent)
+//   - Bottom bar:  Done (primary) → review sheet → save
 //
 
 import SwiftUI
@@ -33,6 +33,7 @@ struct XrayView: View {
     @State private var meshDensity: MeshDensity = .full
     @State private var meshFresnelIntensity: Float = 0.0
     @State private var meshOpacity: Float = 0.55
+    @State private var meshVisualizationMode: MeshVisualizationMode = .classification
     @State private var classificationStyles = ClassificationStyles()
     @Environment(AppServices.self) private var services
     private var scans: ScanRepository { services.scans }
@@ -46,30 +47,41 @@ struct XrayView: View {
     @State private var showingPresets = false
 
     var body: some View {
-        ZStack {
-            ARMetalViewRepresentable(
-                session: sessionManager.session,
-                meshCache: sessionManager.meshCache,   // ⟵ mesh ON
-                filter: .none,                          // no camera filter in Xray
-                meshFillMode: meshFillMode,
-                meshDensity: meshDensity,
-                meshFresnelIntensity: meshFresnelIntensity,
-                meshOpacity: meshOpacity,
-                meshPalette: classificationStyles.palette,
-                meshClassVisibilityMask: classificationStyles.visibilityMask,
-                captureTrigger: captureTrigger,
-                onCapture: handleCapture
-            )
-            .ignoresSafeArea()
+        // Foreground respects the safe area (so the HUD never clips);
+        // the full-bleed AR content lives in `.background`, which is
+        // layout-neutral — it doesn't stretch this stack to the
+        // physical screen edge the way an in-stack ignoresSafeArea
+        // child would.
+        ZStack(alignment: .trailing) {
+            Color.clear
+            hudControls
+        }
+        .background {
+            ZStack {
+                ARMetalViewRepresentable(
+                    session: sessionManager.session,
+                    meshCache: sessionManager.meshCache,   // ⟵ mesh ON
+                    filter: .none,                          // no camera filter in Xray
+                    meshFillMode: meshFillMode,
+                    meshDensity: meshDensity,
+                    meshFresnelIntensity: meshFresnelIntensity,
+                    meshOpacity: meshOpacity,
+                    meshPalette: classificationStyles.palette,
+                    meshClassVisibilityMask: classificationStyles.visibilityMask,
+                    meshVisualizationMode: meshVisualizationMode,
+                    captureTrigger: captureTrigger,
+                    onCapture: handleCapture
+                )
 
-            ARCoachingOverlay(
-                session: sessionManager.session,
-                onActiveChange: { sessionManager.setCoachingActive($0) }
-            )
-            .ignoresSafeArea()
+                ARCoachingOverlay(
+                    session: sessionManager.session,
+                    onActiveChange: { sessionManager.setCoachingActive($0) }
+                )
 
-            ARMessageOverlay()
-                .environment(messages)
+                ARMessageOverlay()
+                    .environment(messages)
+            }
+            .ignoresSafeArea()
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
@@ -95,60 +107,10 @@ struct XrayView: View {
                 }
             }
         }
-        // Bottom bar kept in its own .toolbar — the ToolbarContentBuilder
-        // caps at 10 elements, and the separate-pill layout (spacers
-        // between each item) puts this cluster right at that limit.
+        // Bottom bar — primary action only. Tools live in the
+        // right-edge HUD cluster (hudControls).
         .toolbar {
-            // MARK: Bottom bar — action cluster: presets · classification
-            // · save · capture · fill-mode. Spacers render each as its
-            // own Liquid Glass pill.
             ToolbarSpacer(.flexible, placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    showingPresets = true
-                } label: {
-                    Image(systemName: "sparkles")
-                }
-                .accessibilityLabel("Style presets")
-            }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    showingClassification = true
-                } label: {
-                    Image(systemName: "paintpalette.fill")
-                }
-                .accessibilityLabel("Classification")
-            }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    captureTrigger &+= 1
-                } label: {
-                    Image(systemName: "camera.fill")
-                }
-                .accessibilityLabel("Capture")
-            }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-
-            ToolbarItem(placement: .bottomBar) {
-                Button {
-                    withAnimation(MosaicMotion.snappy) {
-                        meshFillMode = (meshFillMode == .filled) ? .wireframe : .filled
-                    }
-                } label: {
-                    Image(systemName: meshFillMode == .filled
-                          ? "cube.fill"
-                          : "cube.transparent")
-                }
-                .accessibilityLabel(meshFillMode == .filled ? "Switch to wireframe" : "Switch to filled")
-            }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-
-            // Done — primary action, far right (filled/blue).
             ToolbarItem(placement: .bottomBar) {
                 Button("Done") {
                     handleDone()
@@ -199,6 +161,45 @@ struct XrayView: View {
             sessionManager.stop()
             messages.clearAll()
         }
+    }
+
+    // MARK: - HUD controls (right-edge cluster)
+
+    private var hudControls: some View {
+        VStack(spacing: MosaicSpacing.md) {
+            ViewerControlButton(
+                title: "Density",
+                icon: meshVisualizationMode == .density ? "chart.bar.fill" : "chart.bar",
+                isActive: meshVisualizationMode == .density
+            ) {
+                withAnimation(MosaicMotion.snappy) {
+                    meshVisualizationMode = (meshVisualizationMode == .density) ? .classification : .density
+                }
+            }
+
+            ViewerControlButton(title: "Presets", icon: "sparkles") {
+                showingPresets = true
+            }
+
+            ViewerControlButton(title: "Classes", icon: "paintpalette.fill") {
+                showingClassification = true
+            }
+
+            ViewerControlButton(title: "Photo", icon: "camera.fill") {
+                captureTrigger &+= 1
+            }
+
+            ViewerControlButton(
+                title: meshFillMode == .filled ? "Solid" : "Wire",
+                icon: meshFillMode == .filled ? "cube.fill" : "cube.transparent",
+                isActive: meshFillMode == .wireframe
+            ) {
+                withAnimation(MosaicMotion.snappy) {
+                    meshFillMode = (meshFillMode == .filled) ? .wireframe : .filled
+                }
+            }
+        }
+        .padding(.trailing, MosaicSpacing.lg)
     }
 
     // MARK: - Preset apply

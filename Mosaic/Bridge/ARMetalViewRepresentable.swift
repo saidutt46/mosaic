@@ -30,6 +30,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     let meshOpacity: Float
     let meshPalette: [SIMD4<Float>]
     let meshClassVisibilityMask: UInt32
+    let meshVisualizationMode: MeshVisualizationMode
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
 
@@ -47,6 +48,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         renderer.setMeshOpacity(meshOpacity)
         renderer.setMeshPalette(meshPalette)
         renderer.setMeshClassVisibility(meshClassVisibilityMask)
+        renderer.setMeshVisualizationMode(meshVisualizationMode)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger
         return view
@@ -60,6 +62,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         context.coordinator.renderer?.setMeshOpacity(meshOpacity)
         context.coordinator.renderer?.setMeshPalette(meshPalette)
         context.coordinator.renderer?.setMeshClassVisibility(meshClassVisibilityMask)
+        context.coordinator.renderer?.setMeshVisualizationMode(meshVisualizationMode)
 
         if captureTrigger != context.coordinator.lastCaptureTrigger {
             context.coordinator.lastCaptureTrigger = captureTrigger

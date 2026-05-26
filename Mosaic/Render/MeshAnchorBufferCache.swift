@@ -50,6 +50,11 @@ struct MeshAnchorBuffers: @unchecked Sendable {
     /// `faceCount` `UInt8` classification values
     /// (raw values of `ARMeshClassification`).
     let classificationBuffer: MTLBuffer?
+
+    /// `faceCount` `Float` per-face triangle areas (m²), for the
+    /// density visualization mode. World-space == local-space here
+    /// since ARKit mesh-anchor transforms are rigid.
+    let areaBuffer: MTLBuffer?
 }
 
 @MainActor
@@ -190,6 +195,23 @@ final class MeshAnchorBufferCache {
             )
         }
 
+        // Per-face triangle area (m²) for the density visualization.
+        var areaBuffer: MTLBuffer?
+        if let buffer = device.makeBuffer(length: faceCount * MemoryLayout<Float>.size,
+                                           options: .storageModeShared) {
+            buffer.label = "Mosaic.MeshFaceAreas"
+            let verts = vertexBuffer.contents().assumingMemoryBound(to: SIMD3<Float>.self)
+            let idx = indexBuffer.contents().assumingMemoryBound(to: UInt32.self)
+            let areas = buffer.contents().assumingMemoryBound(to: Float.self)
+            for f in 0..<faceCount {
+                let p0 = verts[Int(idx[f * 3])]
+                let p1 = verts[Int(idx[f * 3 + 1])]
+                let p2 = verts[Int(idx[f * 3 + 2])]
+                areas[f] = 0.5 * simd_length(simd_cross(p1 - p0, p2 - p0))
+            }
+            areaBuffer = buffer
+        }
+
         return MeshAnchorBuffers(
             identifier: anchor.identifier,
             transform: anchor.transform,
@@ -198,7 +220,8 @@ final class MeshAnchorBufferCache {
             normalBuffer: normalBuffer,
             indexBuffer: indexBuffer,
             faceCount: faceCount,
-            classificationBuffer: classificationBuffer
+            classificationBuffer: classificationBuffer,
+            areaBuffer: areaBuffer
         )
     }
 

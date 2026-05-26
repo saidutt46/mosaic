@@ -29,6 +29,9 @@ struct MeshUniforms {
     var scanLineIntensity: Float
     var densityStride: UInt32
     var classVisibilityMask: UInt32   // bit N ⇒ class N visible
+    var visualizationMode: UInt32     // 0 = classification, 1 = density
+    var densityLogMin: Float          // log2(area) mapped to ramp 0 (dense)
+    var densityLogMax: Float          // log2(area) mapped to ramp 1 (sparse)
 }
 
 /// User-facing density preset. Raw value is the shader's
@@ -96,6 +99,13 @@ final class MeshOverlayPass {
     var opacity: Float = 0.55                       // 0…1 alpha multiplier
     var palette: [SIMD4<Float>] = defaultPalette
     var classVisibilityMask: UInt32 = defaultVisibilityMask
+    var visualizationMode: MeshVisualizationMode = .classification
+
+    /// log2(triangle area m²) bounds for the density ramp. Typical
+    /// LiDAR faces run ~1e-4 m² (dense) to ~0.03 m² (sparse); tuned in
+    /// a later pass (F.1.2).
+    private static let densityLogMin: Float = -12   // ≈ 0.00024 m² (dense)
+    private static let densityLogMax: Float = -7    // ≈ 0.0078 m² (sparse)
 
     init(context: MetalContext,
          colorPixelFormat: MTLPixelFormat,
@@ -205,7 +215,10 @@ final class MeshOverlayPass {
             fresnelIntensity: fresnelIntensity,
             scanLineIntensity: 0,
             densityStride: density.rawValue,
-            classVisibilityMask: classVisibilityMask
+            classVisibilityMask: classVisibilityMask,
+            visualizationMode: visualizationMode.rawValue,
+            densityLogMin: Self.densityLogMin,
+            densityLogMax: Self.densityLogMax
         )
         encoder.setFragmentBytes(
             &uniforms,
@@ -239,6 +252,9 @@ final class MeshOverlayPass {
             // the loop — persists across draws.
 
             encoder.setFragmentBuffer(classBuffer, offset: 0, index: 0)
+            if let areaBuffer = buffers.areaBuffer {
+                encoder.setFragmentBuffer(areaBuffer, offset: 0, index: 3)
+            }
             encoder.drawIndexedPrimitives(
                 type: .triangle,
                 indexCount: buffers.faceCount * 3,
