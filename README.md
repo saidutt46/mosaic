@@ -1,19 +1,21 @@
 # Mosaic
 
-> **Status:** Active — Track A complete, Track B next
+> **Status:** Active — semantic mesh overlay + scan save / library / 3D viewer shipped; mesh-quality visualization in progress
 > **Platform:** iOS 26+ · Swift 6+ · Xcode 26.5
 > **Devices:** iPhone Pro / iPad Pro with LiDAR (iPhone 12 Pro and later)
 > **Repo:** https://github.com/saidutt46/mosaic
 > **Owner:** Sai Dutt
 
-A semantic mesh visualizer for iOS — and a sandbox for learning Metal. Mosaic uses ARKit's classified scene reconstruction to render the world's surfaces (floor, wall, ceiling, table, seat, window, door) colored by category, on top of the live camera feed. Rendering is hand-written **Metal** on top of **ARKit** (no RealityKit, no SceneKit) so the pipeline is fully owned and reusable.
+A semantic mesh visualizer for iOS — and a sandbox for learning Metal. Mosaic uses ARKit's classified scene reconstruction to render the world's surfaces (floor, wall, ceiling, table, seat, window, door) colored by category, on top of the live camera feed. The live "X-ray" pipeline is hand-written **Metal** on top of **ARKit** — fully owned, zero third-party dependencies. (The static saved-scan 3D viewer uses RealityKit; the real-time render path never does.)
 
-The product roadmap is split into two tracks:
+Roadmap:
 
-- **Track A — Camera Filters (done).** A learning playground: the camera feed flows through a swappable fragment shader. Ten effects shipped: Tint, Monochrome, Color Swap, Posterize, Hue Rotate, Vignette, Pixelate, Edge Detect, Thermal. Built to ramp up Metal intuition before the real product.
-- **Track B — Semantic Mesh Overlay (next).** Render the classified ARKit mesh in Metal over the camera feed, colored per `ARMeshClassification`. Wireframe / filled toggle, Fresnel / scan-line styling, FPS HUD. This is the actual PRD target.
+- **Track A — Camera Filters ✅** A learning playground: the camera feed flows through a swappable fragment shader. Ten effects shipped (Tint, Monochrome, Color Swap, Posterize, Hue Rotate, Vignette, Pixelate, Edge Detect, Thermal). Built to ramp up Metal intuition.
+- **Track B — Semantic Mesh Overlay ✅** The classified ARKit mesh rendered in Metal over the camera, colored per `ARMeshClassification`. Wireframe / filled, opacity, Fresnel, density, style presets, per-class color + visibility.
+- **Mesh persistence & 3D viewer ✅** Snapshot a scan and save it (USDZ + PLY point cloud) into a Files-visible library; browse it in an Apple-Music-style grid; open it in a RealityKit 3D viewer (orbit, camera presets, per-class layers, AR Quick Look) or share it.
+- **Mesh quality visualization 🔧 (in progress)** A render-modes layer over the live mesh — density now, scan coverage/quality next — toward real-time capture guidance.
 
-Future tracks (post-v1): object detection layered on the mesh (YOLO / Vision), Object Capture / scene reconstruction video, mesh persistence (ARWorldMap), export (OBJ / USD).
+Future: object detection layered on the mesh (Vision / Core ML, tap-to-identify), ARWorldMap re-localization, more export formats.
 
 ---
 
@@ -22,6 +24,8 @@ Future tracks (post-v1): object detection layered on the mesh (YOLO / Vision), O
 - ARKit world tracking with `.meshWithClassification` scene reconstruction (gated to LiDAR devices)
 - Hand-written Metal camera pipeline: `ARFrame.capturedImage` (YCbCr biplanar) → `CVMetalTextureCache` → fragment shader (YCbCr→RGB) → `MTKView`
 - 10 swappable fragment shaders ("filters"), each ~10–50 lines of Metal
+- **Semantic mesh overlay** — classified mesh rendered in Metal over the camera, per-class colored; wireframe/filled, opacity, Fresnel, density, style presets, per-class color + visibility; live density visualization mode
+- **Save / library / 3D viewer** — snapshot a scan → USDZ (ModelIO `.usdc` + hand-rolled USDZ zip) + PLY point cloud, written atomically into a Files-visible `Documents/Scans/` library; Apple-Music-style grid (rename, share, delete); RealityKit detail viewer (orbit, camera presets with smooth transitions, per-class layers, AR Quick Look)
 - Front camera (selfie) toggle via `ARFaceTrackingConfiguration` — filters work on both
 - Photo capture: blit drawable → CPU-readable texture → `UIImage` → Photos library
 - AR-scoped message bus (`ARMessages`) with priority queue, dedupe, sticky, two slots (bottom chip · center card)
@@ -35,7 +39,7 @@ Layered per the PRD; `Render/` is pure Metal (no SwiftUI imports), `Bridge/` glu
 
 ```
 Mosaic/
-├── App/                           MosaicApp, ContentView
+├── App/                           MosaicApp, ContentView, AppServices (DI root)
 ├── Design/                        Tokens (Colors, Typography, Spacing, Radius, Motion),
 │                                  Modifiers (GlassCard, SectionLabel), DesignGallery
 ├── Core/
@@ -50,14 +54,21 @@ Mosaic/
 │   ├── Renderer.swift             MTKViewDelegate, draw loop, capture
 │   ├── CameraBackgroundPass.swift YCbCr→RGB pipeline + per-filter pipeline cache
 │   ├── CameraFilter.swift         enum of 10 filters + metadata
-│   └── Shaders/Shaders.metal      vertex + 10 fragments
+│   ├── MeshOverlayPass.swift      classified-mesh draw + visualization modes
+│   ├── MeshAnchorBufferCache.swift  owned per-anchor GPU buffers (+ per-face area)
+│   ├── MeshVisualizationMode.swift  classification | density
+│   └── Shaders/Shaders.metal      camera fragments + mesh vertex/fragment
 ├── Bridge/
 │   └── ARMetalViewRepresentable.swift  hosts MTKView in SwiftUI
 └── Features/
     ├── Home/                      HomeView + QuickActionTile + SystemInfoSheet
     ├── Settings/                  SettingsView
-    └── AR/                        ARView, ARCoachingOverlay, CameraFilterStrip,
-                                   Messages/ (ARMessages + ARMessageOverlay)
+    ├── AR/                        ARCoachingOverlay, CameraFilterStrip, Messages/,
+    │                              Filters/ (FiltersView), Xray/ (capture HUD,
+    │                              save + classification + stats sheets)
+    └── Scans/                     save/library/viewer: ScanRepository, USDZExporter
+                                   + USDZArchive, PLYExporter, ScanLibraryView,
+                                   XrayScanViewer + RealityModelView, camera presets
 ```
 
 ## Stack
