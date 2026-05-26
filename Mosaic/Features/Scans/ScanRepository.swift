@@ -125,6 +125,23 @@ final class ScanRepository {
         }
     }
 
+    // MARK: - Rename
+
+    /// Update a scan's display name — rewrites manifest.json and the
+    /// in-memory model so the change reflects everywhere sharing this repo.
+    func rename(_ id: UUID, to newName: String) async throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = scans.firstIndex(where: { $0.id == id }) else { return }
+
+        var scan = scans[index]
+        scan.name = trimmed
+        let manifestURL = DocumentsURL.artifactURL(scanID: id, .manifest)
+        let data = try Self.encoder.encode(scan)
+        try data.write(to: manifestURL)
+        scans[index] = scan
+        Log.app.info("scan renamed: \(id.uuidString.prefix(8), privacy: .public)")
+    }
+
     // MARK: - Delete
 
     func delete(_ id: UUID) async throws {

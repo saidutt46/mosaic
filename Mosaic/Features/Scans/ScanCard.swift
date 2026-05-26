@@ -14,6 +14,7 @@ struct ScanCard: View {
     let thumbnailURL: URL?
     let onTap: () -> Void
     let onShare: () -> Void
+    let onRename: () -> Void
     let onDelete: () -> Void
 
     @State private var thumbnail: UIImage?
@@ -40,6 +41,9 @@ struct ScanCard: View {
         }
         .contentShape(Rectangle())
         .contextMenu {
+            Button(action: onRename) {
+                Label("Rename", systemImage: "pencil")
+            }
             Button(action: onShare) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }

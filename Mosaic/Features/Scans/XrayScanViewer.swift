@@ -15,7 +15,11 @@ import QuickLook
 struct XrayScanViewer: View {
     let scan: Scan
 
+    @Environment(AppServices.self) private var services
+    private var repo: ScanRepository { services.scans }
     @State private var cameraPreset: CameraPreset = .default
+    @State private var showingRename = false
+    @State private var renameText = ""
     @State private var presetToken = 0
     @State private var resetToken = 0
     @State private var shareItem: ShareItem?
@@ -25,6 +29,10 @@ struct XrayScanViewer: View {
     @State private var isLoading = true
 
     private var meshURL: URL? { artifactURL(.usdz) }
+
+    /// Live scan from the shared repo (reflects renames); falls back to
+    /// the value we were navigated with.
+    private var currentScan: Scan { repo.scans.first { $0.id == scan.id } ?? scan }
 
     var body: some View {
         ZStack {
@@ -66,7 +74,14 @@ struct XrayScanViewer: View {
                 .accessibilityLabel("View in AR")
             }
         }
-        .sheet(isPresented: $showingInfo) { ScanInfoSheet(scan: scan) }
+        .sheet(isPresented: $showingInfo) { ScanInfoSheet(scan: currentScan) }
+        .alert("Rename Scan", isPresented: $showingRename) {
+            TextField("Name", text: $renameText)
+            Button("Save") {
+                Task { try? await repo.rename(scan.id, to: renameText) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .sheet(isPresented: $showingPresets) {
             CameraPresetsSheet(current: cameraPreset) { preset in
                 cameraPreset = preset
@@ -108,10 +123,14 @@ struct XrayScanViewer: View {
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
+            Button {
+                renameText = currentScan.name
+                showingRename = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
             Section {
-                // Placeholders — wired up in a later pass.
-                Button {} label: { Label("Rename", systemImage: "pencil") }
-                    .disabled(true)
+                // Placeholder — wired up in a later pass.
                 Button {} label: { Label("Add to Collection", systemImage: "folder.badge.plus") }
                     .disabled(true)
             }
@@ -124,7 +143,7 @@ struct XrayScanViewer: View {
 
     private func shareCurrent() {
         guard let source = meshURL,
-              let shareURL = ShareFile.prepared(from: source, named: scan.name) else { return }
+              let shareURL = ShareFile.prepared(from: source, named: currentScan.name) else { return }
         shareItem = ShareItem(url: shareURL)
     }
 

@@ -12,10 +12,13 @@ import SwiftUI
 import QuickLook
 
 struct ScanLibraryView: View {
-    @State private var repo = ScanRepository()
+    @Environment(AppServices.self) private var services
+    private var repo: ScanRepository { services.scans }
     @State private var selectedScan: Scan?
     @State private var shareItem: ShareItem?
     @State private var scanToDelete: Scan?
+    @State private var scanToRename: Scan?
+    @State private var renameText = ""
 
     private let columns = [
         GridItem(.adaptive(minimum: 150, maximum: 200), spacing: MosaicSpacing.lg)
@@ -38,6 +41,7 @@ struct ScanLibraryView: View {
                                 thumbnailURL: repo.openURL(for: scan.id, artifact: .thumbnail),
                                 onTap: { selectedScan = scan },
                                 onShare: { share(scan) },
+                                onRename: { renameText = scan.name; scanToRename = scan },
                                 onDelete: { scanToDelete = scan }
                             )
                         }
@@ -64,6 +68,20 @@ struct ScanLibraryView: View {
         } message: { scan in
             Text("“\(scan.name)” and its files will be permanently deleted. This can’t be undone.")
         }
+        .alert(
+            "Rename Scan",
+            isPresented: Binding(get: { scanToRename != nil },
+                                 set: { if !$0 { scanToRename = nil } }),
+            presenting: scanToRename
+        ) { scan in
+            TextField("Name", text: $renameText)
+            Button("Save") { rename(scan, to: renameText) }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func rename(_ scan: Scan, to newName: String) {
+        Task { try? await repo.rename(scan.id, to: newName) }
     }
 
     private func share(_ scan: Scan) {
