@@ -35,13 +35,14 @@ struct XrayScanViewer: View {
                 resetToken: resetToken,
                 onLoaded: { isLoading = false }
             )
-            .ignoresSafeArea(edges: .bottom)
+            .ignoresSafeArea()
 
             if isLoading { loadingOverlay }
         }
         .overlay(alignment: .trailing) { controls }
-        .navigationTitle(scan.name)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -89,7 +90,7 @@ struct XrayScanViewer: View {
 
     private var controls: some View {
         VStack(spacing: MosaicSpacing.md) {
-            ViewerControlButton(title: "Camera", icon: "rotate.3d") {
+            ViewerControlButton(title: "Camera", icon: "camera.aperture") {
                 showingPresets = true
             }
 

@@ -57,6 +57,7 @@ struct RealityModelView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         private let onLoaded: () -> Void
+        private let animator = CameraAnimator()
         private weak var arView: ARView?
         private var camera: Entity?
 
@@ -153,15 +154,27 @@ struct RealityModelView: UIViewRepresentable {
         }
 
         func apply(_ preset: CameraPreset) {
-            rotation = preset.rotation   // keep current zoom + focus
-            updateCamera()
+            // Animate the orbit angle, keep current zoom + focus.
+            animate(to: CameraAnimator.CameraState(
+                rotation: preset.rotation, distance: distance, center: center))
         }
 
         func reset() {
-            rotation = CameraPreset.default.rotation
-            distance = defaultDistance
-            center = defaultCenter
-            updateCamera()
+            animate(to: CameraAnimator.CameraState(
+                rotation: CameraPreset.default.rotation,
+                distance: defaultDistance,
+                center: defaultCenter))
+        }
+
+        private func animate(to target: CameraAnimator.CameraState) {
+            let from = CameraAnimator.CameraState(rotation: rotation, distance: distance, center: center)
+            animator.animate(from: from, to: target) { [weak self] state in
+                guard let self else { return }
+                rotation = state.rotation
+                distance = state.distance
+                center = state.center
+                updateCamera()
+            }
         }
 
         private func updateCamera() {
@@ -180,6 +193,7 @@ struct RealityModelView: UIViewRepresentable {
         // MARK: Gestures
 
         @objc private func handleOrbit(_ g: UIPanGestureRecognizer) {
+            animator.cancel()
             let t = g.translation(in: g.view)
             g.setTranslation(.zero, in: g.view)
             let sensitivity: Float = 0.007
@@ -190,6 +204,7 @@ struct RealityModelView: UIViewRepresentable {
 
         @objc private func handleTruck(_ g: UIPanGestureRecognizer) {
             guard let camera else { return }
+            animator.cancel()
             let t = g.translation(in: g.view)
             g.setTranslation(.zero, in: g.view)
             // Move the focus point in the camera's screen plane so the
@@ -203,6 +218,7 @@ struct RealityModelView: UIViewRepresentable {
         }
 
         @objc private func handlePinch(_ g: UIPinchGestureRecognizer) {
+            animator.cancel()
             distance = min(max(distance / Float(g.scale), minDistance), maxDistance)
             g.scale = 1
             updateCamera()
