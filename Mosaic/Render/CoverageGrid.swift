@@ -27,6 +27,9 @@ import os
 
 final class CoverageGrid {
 
+    /// All tunable — 5 cm reads well on device; revisit if face-centroid
+    /// lookups miss (raise to 8–10 cm) or accumulation costs too much
+    /// (raise the stride / Nth-frame).
     struct Tuning {
         var voxelSize: Float = 0.05        // 5 cm cells
         var maxRange: Float = 4.0          // proximity falloff (m)
