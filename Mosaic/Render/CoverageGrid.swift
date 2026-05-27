@@ -136,6 +136,30 @@ final class CoverageGrid {
         return cells[key] ?? 0
     }
 
+    /// Coverage tallies for the coach: total observed voxels and how
+    /// many clear the "well covered" quality bar.
+    func stats(wellCoveredAbove threshold: Float) -> (observed: Int, wellCovered: Int) {
+        var well = 0
+        for quality in cells.values where quality >= threshold { well += 1 }
+        return (cells.count, well)
+    }
+
+    /// Mass-centre (world space) of the under-covered voxels and their
+    /// count — the hook the coach turns into a "scan toward here"
+    /// direction. Nil when nothing qualifies.
+    func underCoveredMass(below threshold: Float) -> (centroid: SIMD3<Float>, count: Int)? {
+        let half = tuning.voxelSize * 0.5
+        var sum = SIMD3<Float>(repeating: 0)
+        var count = 0
+        for (key, quality) in cells where quality < threshold {
+            let (ix, iy, iz) = Self.voxelCoords(key)
+            sum += SIMD3<Float>(Float(ix), Float(iy), Float(iz)) * tuning.voxelSize + half
+            count += 1
+        }
+        guard count > 0 else { return nil }
+        return (sum / Float(count), count)
+    }
+
     /// Write occupied voxel centres + quality (xyz, w) into a point
     /// buffer. Returns the number written (capped at `capacity`).
     func writePoints(into pointer: UnsafeMutablePointer<SIMD4<Float>>,

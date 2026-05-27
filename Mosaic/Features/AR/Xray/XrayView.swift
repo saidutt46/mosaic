@@ -57,6 +57,14 @@ struct XrayView: View {
             Color.clear
             hudControls
         }
+        .overlay(alignment: .top) {
+            if meshVisualizationMode == .coverage,
+               let report = sessionManager.coverageReport {
+                CoverageCapsule(report: report)
+                    .padding(.top, MosaicSpacing.sm)
+                    .transition(.opacity)
+            }
+        }
         .background {
             ZStack {
                 ARMetalViewRepresentable(

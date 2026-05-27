@@ -55,6 +55,15 @@ final class ARSessionManager: NSObject {
 
     @ObservationIgnored private var summaryTask: Task<Void, Never>?
 
+    /// Latest scan-coverage evaluation (F.2.3), published for the HUD.
+    /// Non-nil only while the coverage mode is active; the engine itself
+    /// is pure (`CaptureCoach`) and reads `meshCache.coverageGrid`.
+    private(set) var coverageReport: CoverageReport?
+
+    @ObservationIgnored private let coach = CaptureCoach()
+    @ObservationIgnored private var coachTask: Task<Void, Never>?
+    private static let coachInterval: Duration = .milliseconds(330)  // ~3 Hz
+
     /// The configuration last run, kept so we can resume after a review
     /// pause without resetting tracking or dropping the captured mesh.
     @ObservationIgnored private var currentConfig: ARConfiguration?
@@ -110,6 +119,7 @@ final class ARSessionManager: NSObject {
         // hosting view) handles the cold-start guidance natively.
 
         startSummaryLoop()
+        startCoachLoop()
     }
 
     /// Flip between the back (world-tracking, mesh) and front
@@ -150,6 +160,9 @@ final class ARSessionManager: NSObject {
     func stop() {
         summaryTask?.cancel()
         summaryTask = nil
+        coachTask?.cancel()
+        coachTask = nil
+        coverageReport = nil
         session.pause()
         isRunning = false
         stats.reset()
@@ -165,6 +178,8 @@ final class ARSessionManager: NSObject {
         guard isRunning else { return }
         summaryTask?.cancel()
         summaryTask = nil
+        coachTask?.cancel()
+        coachTask = nil
         session.pause()
         isRunning = false
         Log.ar.info("ARSession paused for review")
@@ -177,6 +192,7 @@ final class ARSessionManager: NSObject {
         session.run(config, options: [])
         isRunning = true
         startSummaryLoop()
+        startCoachLoop()
         Log.ar.info("ARSession resumed from review")
     }
 
@@ -193,6 +209,31 @@ final class ARSessionManager: NSObject {
                 if !summary.isEmpty {
                     Log.ar.info("mesh · \(summary, privacy: .public)")
                 }
+            }
+        }
+    }
+
+    // MARK: - Coverage coach
+
+    /// Tick the coverage engine while the coverage mode is on screen
+    /// (gated by `meshCache.isCoverageActive`, set by the renderer). The
+    /// engine is pure; this just feeds it the grid + camera pose and
+    /// publishes the result for the HUD. Cleared when coverage is off.
+    private func startCoachLoop() {
+        coachTask?.cancel()
+        coachTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.coachInterval)
+                guard !Task.isCancelled, let self else { return }
+                guard self.meshCache.isCoverageActive else {
+                    if self.coverageReport != nil { self.coverageReport = nil }
+                    continue
+                }
+                let cameraTransform = self.session.currentFrame?.camera.transform
+                self.coverageReport = self.coach.evaluate(
+                    grid: self.meshCache.coverageGrid,
+                    cameraTransform: cameraTransform
+                )
             }
         }
     }
