@@ -22,6 +22,10 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let context = MetalContext.shared
     private let cameraBackgroundPass: CameraBackgroundPass
     private let meshOverlayPass: MeshOverlayPass
+    private let depthPointCloudPass: DepthPointCloudPass
+    private var showDepthPoints = false
+    private var meshVisualizationMode: MeshVisualizationMode = .classification
+    private var coverageRefreshCounter = 0
 
     weak var session: ARSession?
     weak var meshCache: MeshAnchorBufferCache?
@@ -62,6 +66,11 @@ final class Renderer: NSObject, MTKViewDelegate {
             depthPixelFormat: view.depthStencilPixelFormat
         )
         self.meshOverlayPass = MeshOverlayPass(
+            context: context,
+            colorPixelFormat: view.colorPixelFormat,
+            depthPixelFormat: view.depthStencilPixelFormat
+        )
+        self.depthPointCloudPass = DepthPointCloudPass(
             context: context,
             colorPixelFormat: view.colorPixelFormat,
             depthPixelFormat: view.depthStencilPixelFormat
@@ -116,6 +125,12 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     func setMeshVisualizationMode(_ mode: MeshVisualizationMode) {
         meshOverlayPass.visualizationMode = mode
+        meshVisualizationMode = mode
+        meshCache?.isCoverageActive = (mode == .coverage)
+    }
+
+    func setShowDepthPoints(_ show: Bool) {
+        showDepthPoints = show
     }
 
     // MARK: - Capture
@@ -148,6 +163,28 @@ final class Renderer: NSObject, MTKViewDelegate {
         )
 
         if let meshCache {
+            let coverageOn = (meshVisualizationMode == .coverage)
+
+            // Accumulate scan coverage from depth (throttled inside the
+            // grid) only while coverage is being used — keeps the hero
+            // classification mode full-speed.
+            if coverageOn || showDepthPoints,
+               let sceneDepth = frame.sceneDepth,
+               let confidenceMap = sceneDepth.confidenceMap {
+                meshCache.coverageGrid.ingest(
+                    depthMap: sceneDepth.depthMap,
+                    confidenceMap: confidenceMap,
+                    camera: frame.camera
+                )
+            }
+            // Per-face coverage lookup is O(faces) — refresh at a few Hz
+            // (new/updated anchors are filled immediately on update).
+            if coverageOn {
+                coverageRefreshCounter &+= 1
+                if coverageRefreshCounter % 12 == 0 {
+                    meshCache.refreshCoverage()
+                }
+            }
             meshOverlayPass.encode(
                 into: encoder,
                 cache: meshCache,
@@ -155,6 +192,16 @@ final class Renderer: NSObject, MTKViewDelegate {
                 viewportSize: viewportSize,
                 orientation: orientation
             )
+
+            if showDepthPoints {
+                depthPointCloudPass.encode(
+                    into: encoder,
+                    grid: meshCache.coverageGrid,
+                    frame: frame,
+                    viewportSize: viewportSize,
+                    orientation: orientation
+                )
+            }
         }
 
         encoder.endEncoding()

@@ -31,6 +31,8 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
     let meshPalette: [SIMD4<Float>]
     let meshClassVisibilityMask: UInt32
     let meshVisualizationMode: MeshVisualizationMode
+    /// F.2.1a debug — overlay the unprojected sceneDepth point cloud.
+    var showDepthPoints: Bool = false
     let captureTrigger: Int
     let onCapture: @MainActor (UIImage?) -> Void
 
@@ -49,6 +51,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         renderer.setMeshPalette(meshPalette)
         renderer.setMeshClassVisibility(meshClassVisibilityMask)
         renderer.setMeshVisualizationMode(meshVisualizationMode)
+        renderer.setShowDepthPoints(showDepthPoints)
         context.coordinator.renderer = renderer
         context.coordinator.lastCaptureTrigger = captureTrigger
         return view
@@ -63,6 +66,7 @@ struct ARMetalViewRepresentable: UIViewRepresentable {
         context.coordinator.renderer?.setMeshPalette(meshPalette)
         context.coordinator.renderer?.setMeshClassVisibility(meshClassVisibilityMask)
         context.coordinator.renderer?.setMeshVisualizationMode(meshVisualizationMode)
+        context.coordinator.renderer?.setShowDepthPoints(showDepthPoints)
 
         if captureTrigger != context.coordinator.lastCaptureTrigger {
             context.coordinator.lastCaptureTrigger = captureTrigger

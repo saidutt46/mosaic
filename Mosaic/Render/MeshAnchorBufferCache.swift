@@ -55,6 +55,11 @@ struct MeshAnchorBuffers: @unchecked Sendable {
     /// density visualization mode. World-space == local-space here
     /// since ARKit mesh-anchor transforms are rigid.
     let areaBuffer: MTLBuffer?
+
+    /// `faceCount` `Float` per-face coverage quality [0, 1] for the
+    /// coverage visualization mode — refreshed from the CoverageGrid
+    /// (zeroed at build; written by `refreshCoverage`).
+    let coverageBuffer: MTLBuffer?
 }
 
 @MainActor
@@ -62,6 +67,16 @@ final class MeshAnchorBufferCache {
 
     private let device: MTLDevice
     private var entries: [UUID: MeshAnchorBuffers] = [:]
+
+    /// World-space scan-coverage accumulator (F.2). Lives here so a
+    /// rebuilt anchor can repopulate its per-face coverage from the grid
+    /// the instant it's created — otherwise a freshly-zeroed coverage
+    /// buffer flashes red on every ARKit mesh update.
+    let coverageGrid = CoverageGrid()
+
+    /// Set by the renderer when the coverage mode is on screen. Gates the
+    /// O(faces) coverage fill so classification/density stay full-speed.
+    var isCoverageActive = false
 
     // MARK: - Density histogram (adaptive ramp bounds, F.1.2)
     //
@@ -147,6 +162,9 @@ final class MeshAnchorBufferCache {
         if let previous { accumulateHistogram(for: previous, sign: -1) }
         entries[anchor.identifier] = buffers
         accumulateHistogram(for: buffers, sign: 1)
+        // Populate the rebuilt anchor's coverage from the persistent grid
+        // right away so it never flashes red between updates.
+        if isCoverageActive { fillCoverage(buffers) }
         if previous == nil {
             Log.metal.debug("mesh cache: +anchor \(anchor.identifier.uuidString.prefix(8), privacy: .public) verts=\(buffers.vertexCount) faces=\(buffers.faceCount)")
         }
@@ -282,6 +300,16 @@ final class MeshAnchorBufferCache {
             areaBuffer = buffer
         }
 
+        // Per-face coverage — zeroed now, filled by refreshCoverage from
+        // the CoverageGrid while the coverage mode is active.
+        var coverageBuffer: MTLBuffer?
+        if let buffer = device.makeBuffer(length: faceCount * MemoryLayout<Float>.size,
+                                           options: .storageModeShared) {
+            buffer.label = "Mosaic.MeshCoverage"
+            memset(buffer.contents(), 0, faceCount * MemoryLayout<Float>.size)
+            coverageBuffer = buffer
+        }
+
         return MeshAnchorBuffers(
             identifier: anchor.identifier,
             transform: anchor.transform,
@@ -291,8 +319,35 @@ final class MeshAnchorBufferCache {
             indexBuffer: indexBuffer,
             faceCount: faceCount,
             classificationBuffer: classificationBuffer,
-            areaBuffer: areaBuffer
+            areaBuffer: areaBuffer,
+            coverageBuffer: coverageBuffer
         )
+    }
+
+    /// Refresh every anchor's per-face coverage from the grid. Throttled
+    /// by the caller (coverage changes slowly). O(total faces) — called
+    /// at a few Hz only while the coverage mode is active, so already-
+    /// stable anchors keep improving as you re-scan a region.
+    func refreshCoverage() {
+        for buffers in entries.values { fillCoverage(buffers) }
+    }
+
+    /// Fill one anchor's per-face coverage by looking up each face's
+    /// world-space centroid in the coverage grid.
+    private func fillCoverage(_ buffers: MeshAnchorBuffers) {
+        guard let coverageBuffer = buffers.coverageBuffer else { return }
+        let verts = buffers.vertexBuffer.contents().assumingMemoryBound(to: SIMD3<Float>.self)
+        let idx = buffers.indexBuffer.contents().assumingMemoryBound(to: UInt32.self)
+        let cov = coverageBuffer.contents().assumingMemoryBound(to: Float.self)
+        let transform = buffers.transform
+        for f in 0..<buffers.faceCount {
+            let p0 = verts[Int(idx[f * 3])]
+            let p1 = verts[Int(idx[f * 3 + 1])]
+            let p2 = verts[Int(idx[f * 3 + 2])]
+            let centroidLocal = (p0 + p1 + p2) / 3
+            let world = transform * SIMD4<Float>(centroidLocal, 1)
+            cov[f] = coverageGrid.quality(atWorld: SIMD3<Float>(world.x, world.y, world.z))
+        }
     }
 
     /// Copy a (possibly strided) source range into a destination

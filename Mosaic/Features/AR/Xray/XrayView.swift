@@ -34,6 +34,7 @@ struct XrayView: View {
     @State private var meshFresnelIntensity: Float = 0.0
     @State private var meshOpacity: Float = 0.55
     @State private var meshVisualizationMode: MeshVisualizationMode = .classification
+    @State private var showDepthPoints = false
     @State private var classificationStyles = ClassificationStyles()
     @Environment(AppServices.self) private var services
     private var scans: ScanRepository { services.scans }
@@ -69,6 +70,7 @@ struct XrayView: View {
                     meshPalette: classificationStyles.palette,
                     meshClassVisibilityMask: classificationStyles.visibilityMask,
                     meshVisualizationMode: meshVisualizationMode,
+                    showDepthPoints: showDepthPoints,
                     captureTrigger: captureTrigger,
                     onCapture: handleCapture
                 )
@@ -170,13 +172,17 @@ struct XrayView: View {
             ViewerControlMenu(
                 title: meshVisualizationMode.label,
                 icon: "point.3.connected.trianglepath.dotted",
-                isActive: meshVisualizationMode.usesAreaRamp,
+                isActive: meshVisualizationMode != .classification,
                 animatesWhenActive: true
             ) {
                 Picker("Mesh shading", selection: $meshVisualizationMode) {
                     ForEach(MeshVisualizationMode.allCases) { mode in
                         Label(mode.label, systemImage: mode.icon).tag(mode)
                     }
+                }
+                Divider()
+                Toggle(isOn: $showDepthPoints) {
+                    Label("Coverage points (debug)", systemImage: "circle.dotted")
                 }
             }
 

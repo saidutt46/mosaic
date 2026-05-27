@@ -460,7 +460,8 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
                               constant uchar         *classifications [[buffer(0)]],
                               constant float4        *palette         [[buffer(1)]],
                               constant MeshUniforms  &uniforms        [[buffer(2)]],
-                              constant float         *faceAreas       [[buffer(3)]]) {
+                              constant float         *faceAreas       [[buffer(3)]],
+                              constant float         *faceCoverage    [[buffer(4)]]) {
     // Density discard — early exit before the palette lookup.
     if (uniforms.densityStride > 1 &&
         (primitiveID % uniforms.densityStride) != 0) {
@@ -476,11 +477,25 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
         discard_fragment();
     }
 
-    // Area-ramp modes (density / quality) — colour by triangle area.
-    // Small faces (dense, well-scanned) → green; large faces (sparse)
-    // → red, through a green→yellow→red ramp. The two modes differ only
-    // in the densityLogMin/Max bounds fed from Swift (adaptive vs fixed).
-    if (uniforms.visualizationMode != 0u) {
+    // Coverage mode — colour by accumulated scan quality per face
+    // (looked up from the world-space CoverageGrid), red (unobserved /
+    // low) → yellow → green (well observed).
+    if (uniforms.visualizationMode == 3u) {
+        float t = saturate(faceCoverage[primitiveID]);
+        float3 low  = float3(1.00, 0.23, 0.19);
+        float3 mid  = float3(1.00, 0.80, 0.00);
+        float3 high = float3(0.20, 0.78, 0.35);
+        float3 rgb = (t < 0.5) ? mix(low, mid, t * 2.0)
+                               : mix(mid, high, (t - 0.5) * 2.0);
+        return float4(rgb, uniforms.alpha);
+    }
+
+    // Area-ramp modes (density = 1 / quality = 2) — colour by triangle
+    // area. Small faces (dense, well-scanned) → green; large faces
+    // (sparse) → red, through a green→yellow→red ramp. The two modes
+    // differ only in the densityLogMin/Max bounds fed from Swift
+    // (adaptive vs fixed).
+    if (uniforms.visualizationMode == 1u || uniforms.visualizationMode == 2u) {
         float logArea = log2(max(faceAreas[primitiveID], 1e-9));
         float t = saturate((logArea - uniforms.densityLogMin) /
                            (uniforms.densityLogMax - uniforms.densityLogMin));
@@ -583,4 +598,38 @@ fragment float4 cameraFragmentEdge(CameraVertexOut in [[stage_in]],
     edge = saturate(edge * 1.5);
 
     return float4(edge, edge, edge, 1.0);
+}
+
+// MARK: - Coverage point cloud (F.2.1b debug)
+//
+// Renders the CoverageGrid's occupied voxel centres as world-space
+// points coloured by accumulated coverage quality through a red→yellow→
+// green ramp. The vertex buffer is one float4 per point: xyz = world
+// position, w = quality in [0, 1]. Points persist in world space, so
+// they stick to real surfaces as the camera moves.
+struct DepthPointOut {
+    float4 position  [[position]];
+    float  pointSize [[point_size]];
+    float  quality;
+};
+
+vertex DepthPointOut depthPointVertex(uint vid                      [[vertex_id]],
+                                      constant float4   *points     [[buffer(0)]],
+                                      constant float4x4 &viewProjection [[buffer(1)]]) {
+    float4 p = points[vid];
+    DepthPointOut out;
+    out.position = viewProjection * float4(p.xyz, 1.0);
+    out.pointSize = 7.0;
+    out.quality = p.w;
+    return out;
+}
+
+fragment float4 depthPointFragment(DepthPointOut in [[stage_in]]) {
+    float t = saturate(in.quality);
+    float3 low  = float3(1.00, 0.23, 0.19);  // poorly observed → red
+    float3 mid  = float3(1.00, 0.80, 0.00);  // → yellow
+    float3 high = float3(0.20, 0.78, 0.35);  // well observed → green
+    float3 rgb = (t < 0.5) ? mix(low, mid, t * 2.0)
+                           : mix(mid, high, (t - 0.5) * 2.0);
+    return float4(rgb, 1.0);
 }

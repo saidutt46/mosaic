@@ -213,7 +213,7 @@ final class MeshOverlayPass {
         let densityBounds: (min: Float, max: Float)
         switch visualizationMode {
         case .density: densityBounds = cache.densityLogBounds
-        case .quality, .classification: densityBounds = Self.qualityLogBounds
+        case .quality, .classification, .coverage: densityBounds = Self.qualityLogBounds
         }
 
         // Per-frame mesh-shader uniforms pushed as one struct at
@@ -264,6 +264,9 @@ final class MeshOverlayPass {
             encoder.setFragmentBuffer(classBuffer, offset: 0, index: 0)
             if let areaBuffer = buffers.areaBuffer {
                 encoder.setFragmentBuffer(areaBuffer, offset: 0, index: 3)
+            }
+            if let coverageBuffer = buffers.coverageBuffer {
+                encoder.setFragmentBuffer(coverageBuffer, offset: 0, index: 4)
             }
             encoder.drawIndexedPrimitives(
                 type: .triangle,
