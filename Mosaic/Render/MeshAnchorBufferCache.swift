@@ -63,6 +63,29 @@ final class MeshAnchorBufferCache {
     private let device: MTLDevice
     private var entries: [UUID: MeshAnchorBuffers] = [:]
 
+    // MARK: - Density histogram (adaptive ramp bounds, F.1.2)
+    //
+    // The density ramp normalises against the scene's *actual* face-area
+    // distribution, not a fixed window — so it reads sensibly in any room.
+    // We maintain a coarse log2(area) histogram incrementally as anchors
+    // come and go (each face is binned once at build time; a replaced or
+    // removed anchor subtracts its old contribution). Ramp bounds are the
+    // p5 / p95 percentiles, which clip the degenerate-sliver and giant-face
+    // tails that would otherwise skew the range.
+    private static let logAreaMin: Float = -16
+    private static let logAreaMax: Float = 0
+    private static let binCount = 64
+    private static let binWidth = (logAreaMax - logAreaMin) / Float(binCount)
+    private static let lowPercentile: Float = 0.05
+    private static let highPercentile: Float = 0.95
+
+    /// Fallback bounds when no mesh has accumulated yet — the original
+    /// hand-tuned window (≈0.00024 m² dense … ≈0.0078 m² sparse).
+    private static let fallbackLogBounds: (min: Float, max: Float) = (-12, -7)
+
+    private var logAreaHistogram = [Int](repeating: 0, count: binCount)
+    private var histogramTotal = 0
+
     init(device: MTLDevice) {
         self.device = device
     }
@@ -86,6 +109,33 @@ final class MeshAnchorBufferCache {
         Array(entries.values)
     }
 
+    /// Adaptive log2(area) ramp bounds for the density visualization —
+    /// the p5 / p95 percentiles of the live scene's face areas. Cheap
+    /// (scans the 64-bin histogram); read once per frame by the overlay
+    /// pass. Falls back to the fixed window before any mesh accumulates.
+    var densityLogBounds: (min: Float, max: Float) {
+        guard histogramTotal > 0 else { return Self.fallbackLogBounds }
+
+        let lowTarget = Int(Float(histogramTotal) * Self.lowPercentile)
+        let highTarget = Int(Float(histogramTotal) * Self.highPercentile)
+        var cumulative = 0
+        var loBin = 0
+        var hiBin = Self.binCount - 1
+        var foundLo = false
+        for b in 0..<Self.binCount {
+            cumulative += logAreaHistogram[b]
+            if !foundLo && cumulative >= lowTarget { loBin = b; foundLo = true }
+            if cumulative >= highTarget { hiBin = b; break }
+        }
+
+        let lo = Self.logAreaMin + (Float(loBin) + 0.5) * Self.binWidth
+        var hi = Self.logAreaMin + (Float(hiBin) + 0.5) * Self.binWidth
+        // Guard against a collapsed range (a near-uniform scene) so the
+        // ramp never divides by ~zero and flattens to one colour.
+        if hi - lo < 1.0 { hi = lo + 1.0 }
+        return (lo, hi)
+    }
+
     // MARK: - Lifecycle
 
     func update(from anchor: ARMeshAnchor) {
@@ -93,23 +143,43 @@ final class MeshAnchorBufferCache {
             Log.metal.warning("mesh cache: failed to build buffers for \(anchor.identifier.uuidString.prefix(8), privacy: .public)")
             return
         }
-        let isNew = entries[anchor.identifier] == nil
+        let previous = entries[anchor.identifier]
+        if let previous { accumulateHistogram(for: previous, sign: -1) }
         entries[anchor.identifier] = buffers
-        if isNew {
+        accumulateHistogram(for: buffers, sign: 1)
+        if previous == nil {
             Log.metal.debug("mesh cache: +anchor \(anchor.identifier.uuidString.prefix(8), privacy: .public) verts=\(buffers.vertexCount) faces=\(buffers.faceCount)")
         }
     }
 
     func remove(_ anchor: ARMeshAnchor) {
-        guard entries.removeValue(forKey: anchor.identifier) != nil else { return }
+        guard let removed = entries.removeValue(forKey: anchor.identifier) else { return }
+        accumulateHistogram(for: removed, sign: -1)
         Log.metal.debug("mesh cache: -anchor \(anchor.identifier.uuidString.prefix(8), privacy: .public)")
     }
 
     func reset() {
         let count = entries.count
         entries.removeAll()
+        logAreaHistogram = [Int](repeating: 0, count: Self.binCount)
+        histogramTotal = 0
         if count > 0 {
             Log.metal.info("mesh cache: reset (\(count) anchors dropped)")
+        }
+    }
+
+    /// Add (`sign` +1) or subtract (`sign` -1) an anchor's per-face areas
+    /// from the log2(area) histogram. Called when an anchor is built,
+    /// replaced, or removed so percentiles track the live scene.
+    private func accumulateHistogram(for buffers: MeshAnchorBuffers, sign: Int) {
+        guard let areaBuffer = buffers.areaBuffer else { return }
+        let areas = areaBuffer.contents().assumingMemoryBound(to: Float.self)
+        for f in 0..<buffers.faceCount {
+            let logArea = log2(max(areas[f], 1e-9))
+            let raw = (logArea - Self.logAreaMin) / Self.binWidth
+            let bin = min(max(Int(raw), 0), Self.binCount - 1)
+            logAreaHistogram[bin] += sign
+            histogramTotal += sign
         }
     }
 

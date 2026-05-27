@@ -435,7 +435,7 @@ struct MeshUniforms {
     float scanLineIntensity;     // 0..1
     uint  densityStride;         // 1 = all, 2 = every other, 4 = quarter, 8 = sparse
     uint  classVisibilityMask;   // bit N set ⇒ ARMeshClassification.rawValue N drawn
-    uint  visualizationMode;     // 0 = classification, 1 = density
+    uint  visualizationMode;     // 0 = classification, 1 = density, 2 = quality (1 & 2 share the area ramp)
     float densityLogMin;         // log2(area) → ramp 0 (dense / well-scanned)
     float densityLogMax;         // log2(area) → ramp 1 (sparse)
 };
@@ -476,10 +476,11 @@ fragment float4 meshFragment(MeshVertexOut in        [[stage_in]],
         discard_fragment();
     }
 
-    // Density mode — colour by triangle area as a scan-quality proxy.
+    // Area-ramp modes (density / quality) — colour by triangle area.
     // Small faces (dense, well-scanned) → green; large faces (sparse)
-    // → red, through a green→yellow→red ramp.
-    if (uniforms.visualizationMode == 1u) {
+    // → red, through a green→yellow→red ramp. The two modes differ only
+    // in the densityLogMin/Max bounds fed from Swift (adaptive vs fixed).
+    if (uniforms.visualizationMode != 0u) {
         float logArea = log2(max(faceAreas[primitiveID], 1e-9));
         float t = saturate((logArea - uniforms.densityLogMin) /
                            (uniforms.densityLogMax - uniforms.densityLogMin));

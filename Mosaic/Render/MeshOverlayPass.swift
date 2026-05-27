@@ -101,11 +101,11 @@ final class MeshOverlayPass {
     var classVisibilityMask: UInt32 = defaultVisibilityMask
     var visualizationMode: MeshVisualizationMode = .classification
 
-    /// log2(triangle area m²) bounds for the density ramp. Typical
-    /// LiDAR faces run ~1e-4 m² (dense) to ~0.03 m² (sparse); tuned in
-    /// a later pass (F.1.2).
-    private static let densityLogMin: Float = -12   // ≈ 0.00024 m² (dense)
-    private static let densityLogMax: Float = -7    // ≈ 0.0078 m² (sparse)
+    /// Absolute log2(area m²) window for the `.quality` ramp — a fixed
+    /// real-world bar (≈0.00024 m² dense … ≈0.0078 m² sparse). Well-
+    /// sampled surfaces clear it (green); only genuinely sparse faces
+    /// read red. `.density` ignores this and adapts to the live scene.
+    private static let qualityLogBounds: (min: Float, max: Float) = (-12, -7)
 
     init(context: MetalContext,
          colorPixelFormat: MTLPixelFormat,
@@ -206,6 +206,16 @@ final class MeshOverlayPass {
             index: 1
         )
 
+        // Area-ramp bounds depend on the mode: density adapts to the
+        // live scene's p5/p95 face-area spread (relative); quality uses
+        // a fixed real-world window (absolute). Classification ignores
+        // these entirely.
+        let densityBounds: (min: Float, max: Float)
+        switch visualizationMode {
+        case .density: densityBounds = cache.densityLogBounds
+        case .quality, .classification: densityBounds = Self.qualityLogBounds
+        }
+
         // Per-frame mesh-shader uniforms pushed as one struct at
         // fragment buffer slot 2. classVisibilityMask gates which
         // classes draw at all (see shader: discard_fragment).
@@ -217,8 +227,8 @@ final class MeshOverlayPass {
             densityStride: density.rawValue,
             classVisibilityMask: classVisibilityMask,
             visualizationMode: visualizationMode.rawValue,
-            densityLogMin: Self.densityLogMin,
-            densityLogMax: Self.densityLogMax
+            densityLogMin: densityBounds.min,
+            densityLogMax: densityBounds.max
         )
         encoder.setFragmentBytes(
             &uniforms,

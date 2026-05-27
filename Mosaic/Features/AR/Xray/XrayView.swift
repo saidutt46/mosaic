@@ -167,13 +167,16 @@ struct XrayView: View {
 
     private var hudControls: some View {
         VStack(spacing: MosaicSpacing.md) {
-            ViewerControlButton(
-                title: "Density",
-                icon: meshVisualizationMode == .density ? "chart.bar.fill" : "chart.bar",
-                isActive: meshVisualizationMode == .density
+            ViewerControlMenu(
+                title: meshVisualizationMode.label,
+                icon: "point.3.connected.trianglepath.dotted",
+                isActive: meshVisualizationMode.usesAreaRamp,
+                animatesWhenActive: true
             ) {
-                withAnimation(MosaicMotion.snappy) {
-                    meshVisualizationMode = (meshVisualizationMode == .density) ? .classification : .density
+                Picker("Mesh shading", selection: $meshVisualizationMode) {
+                    ForEach(MeshVisualizationMode.allCases) { mode in
+                        Label(mode.label, systemImage: mode.icon).tag(mode)
+                    }
                 }
             }
 
