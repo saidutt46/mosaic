@@ -46,6 +46,7 @@ enum ScanArtifact: String, Codable, CaseIterable {
     case thumbnail     // thumbnail.jpg
     case meshJSON      // mesh.json
     case pointCloud    // pointcloud.ply
+    case coverage      // coverage.ply (F.2.3 — only present when coverage/coach was used)
 
     var filename: String {
         switch self {
@@ -54,6 +55,7 @@ enum ScanArtifact: String, Codable, CaseIterable {
         case .thumbnail:  "thumbnail.jpg"
         case .meshJSON:   "mesh.json"
         case .pointCloud: "pointcloud.ply"
+        case .coverage:   "coverage.ply"
         }
     }
 }

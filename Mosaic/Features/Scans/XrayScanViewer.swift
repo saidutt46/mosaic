@@ -131,8 +131,20 @@ struct XrayScanViewer: View {
 
     private var overflowMenu: some View {
         Menu {
-            Button {
-                shareCurrent()
+            Menu {
+                Button { share(.usdz) } label: {
+                    Label("3D model (USDZ)", systemImage: "cube")
+                }
+                if currentScan.artifacts.contains(.pointCloud) {
+                    Button { share(.pointCloud) } label: {
+                        Label("Semantic points (PLY)", systemImage: "paintpalette")
+                    }
+                }
+                if currentScan.artifacts.contains(.coverage) {
+                    Button { share(.coverage) } label: {
+                        Label("Scan coverage (PLY)", systemImage: "viewfinder")
+                    }
+                }
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
@@ -154,8 +166,8 @@ struct XrayScanViewer: View {
 
     // MARK: - Actions
 
-    private func shareCurrent() {
-        guard let source = meshURL,
+    private func share(_ artifact: ScanArtifact) {
+        guard let source = artifactURL(artifact),
               let shareURL = ShareFile.prepared(from: source, named: currentScan.name) else { return }
         shareItem = ShareItem(url: shareURL)
     }

@@ -13,7 +13,9 @@ struct ScanCard: View {
     let scan: Scan
     let thumbnailURL: URL?
     let onTap: () -> Void
-    let onShare: () -> Void
+    /// Called with the artifact to share. Card surfaces a submenu when
+    /// more than just the USDZ is available (e.g. coverage.ply).
+    let onShare: (ScanArtifact) -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
 
@@ -44,7 +46,21 @@ struct ScanCard: View {
             Button(action: onRename) {
                 Label("Rename", systemImage: "pencil")
             }
-            Button(action: onShare) {
+            Menu {
+                Button { onShare(.usdz) } label: {
+                    Label("3D model (USDZ)", systemImage: "cube")
+                }
+                if scan.artifacts.contains(.pointCloud) {
+                    Button { onShare(.pointCloud) } label: {
+                        Label("Semantic points (PLY)", systemImage: "paintpalette")
+                    }
+                }
+                if scan.artifacts.contains(.coverage) {
+                    Button { onShare(.coverage) } label: {
+                        Label("Scan coverage (PLY)", systemImage: "viewfinder")
+                    }
+                }
+            } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
             Button(role: .destructive, action: onDelete) {

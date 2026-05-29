@@ -25,6 +25,15 @@ import simd
 import CoreVideo
 import os
 
+/// Immutable, off-thread-safe copy of the grid for export. xyz = world
+/// voxel-centre (metres); w = accumulated quality in [0, 1].
+struct CoverageSnapshot: Sendable {
+    let voxelSize: Float
+    let points: [SIMD4<Float>]
+    var isEmpty: Bool { points.isEmpty }
+    var count: Int { points.count }
+}
+
 final class CoverageGrid {
 
     /// All tunable — 5 cm reads well on device; revisit if face-centroid
@@ -158,6 +167,21 @@ final class CoverageGrid {
         }
         guard count > 0 else { return nil }
         return (sum / Float(count), count)
+    }
+
+    /// Take an immutable copy of the grid for off-thread export
+    /// (e.g. `coverage.ply` save). Sendable; safe to hand to a detached
+    /// task while the live grid keeps mutating.
+    func snapshot() -> CoverageSnapshot {
+        let half = tuning.voxelSize * 0.5
+        var out: [SIMD4<Float>] = []
+        out.reserveCapacity(cells.count)
+        for (key, quality) in cells {
+            let (ix, iy, iz) = Self.voxelCoords(key)
+            let center = SIMD3<Float>(Float(ix), Float(iy), Float(iz)) * tuning.voxelSize + half
+            out.append(SIMD4<Float>(center.x, center.y, center.z, quality))
+        }
+        return CoverageSnapshot(voxelSize: tuning.voxelSize, points: out)
     }
 
     /// Write occupied voxel centres + quality (xyz, w) into a point

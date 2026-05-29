@@ -40,7 +40,7 @@ struct ScanLibraryView: View {
                                 scan: scan,
                                 thumbnailURL: repo.openURL(for: scan.id, artifact: .thumbnail),
                                 onTap: { selectedScan = scan },
-                                onShare: { share(scan) },
+                                onShare: { share(scan, artifact: $0) },
                                 onRename: { renameText = scan.name; scanToRename = scan },
                                 onDelete: { scanToDelete = scan }
                             )
@@ -84,8 +84,8 @@ struct ScanLibraryView: View {
         Task { try? await repo.rename(scan.id, to: newName) }
     }
 
-    private func share(_ scan: Scan) {
-        guard let source = repo.openURL(for: scan.id, artifact: .usdz),
+    private func share(_ scan: Scan, artifact: ScanArtifact) {
+        guard let source = repo.openURL(for: scan.id, artifact: artifact),
               let shareURL = ShareFile.prepared(from: source, named: scan.name) else { return }
         shareItem = ShareItem(url: shareURL)
     }

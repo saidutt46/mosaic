@@ -240,6 +240,9 @@ struct XrayView: View {
         let snapshot: [MeshAnchorBuffers]
         let stats: (anchors: Int, faces: Int, vertices: Int)
         let palette: [SIMD4<Float>]
+        /// Coverage voxel snapshot — nil/empty when coverage/coach wasn't
+        /// used this session; in that case no `coverage.ply` is written.
+        let coverage: CoverageSnapshot?
     }
 
     /// Done — snapshot the scan and request a composited frame; the
@@ -252,12 +255,14 @@ struct XrayView: View {
             messages.show("Nothing to save yet", kind: .warning)
             return
         }
+        let coverage = cache.coverageGrid.snapshot()
         pendingSave = PendingSave(
             snapshot: snapshot,
             stats: (anchors: cache.anchorCount,
                     faces: cache.totalFaceCount,
                     vertices: cache.totalVertexCount),
-            palette: classificationStyles.palette
+            palette: classificationStyles.palette,
+            coverage: coverage.isEmpty ? nil : coverage
         )
         captureTrigger &+= 1
     }
@@ -274,6 +279,7 @@ struct XrayView: View {
                 let scan = try await scans.save(snapshot: pending.snapshot,
                                                 stats: pending.stats,
                                                 palette: pending.palette,
+                                                coverage: pending.coverage,
                                                 thumbnail: capturedThumbnail)
                 showingSaveSheet = false
                 clearPending()

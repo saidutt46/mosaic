@@ -64,6 +64,7 @@ final class ScanRepository {
     func save(snapshot: [MeshAnchorBuffers],
               stats: (anchors: Int, faces: Int, vertices: Int),
               palette: [SIMD4<Float>] = MeshOverlayPass.defaultPalette,
+              coverage: CoverageSnapshot? = nil,
               thumbnail: UIImage?) async throws -> Scan {
         ensureScansDirectory()
 
@@ -84,12 +85,22 @@ final class ScanRepository {
             // Sendable), so reading them from a detached task is safe.
             let usdzURL = writingDir.appendingPathComponent(ScanArtifact.usdz.filename)
             let plyURL = writingDir.appendingPathComponent(ScanArtifact.pointCloud.filename)
+            // coverage.ply is optional — only written when the coach
+            // actually accumulated data this session (ingest is gated to
+            // coverage mode on screen).
+            let coverageURL = writingDir.appendingPathComponent(ScanArtifact.coverage.filename)
+            let coverageToWrite: CoverageSnapshot? = (coverage?.isEmpty == false) ? coverage : nil
+
             try await Task.detached(priority: .userInitiated) {
                 try USDZExporter.write(snapshot: snapshot, palette: palette, to: usdzURL)
                 try PLYExporter.write(snapshot: snapshot, palette: palette, to: plyURL)
+                if let coverageToWrite {
+                    try CoveragePLYExporter.write(snapshot: coverageToWrite, to: coverageURL)
+                }
             }.value
             artifacts.append(.usdz)
             artifacts.append(.pointCloud)
+            if coverageToWrite != nil { artifacts.append(.coverage) }
 
             if let thumbnail, let jpeg = thumbnail.jpegData(compressionQuality: 0.8) {
                 try jpeg.write(to: writingDir.appendingPathComponent(ScanArtifact.thumbnail.filename))
