@@ -64,6 +64,23 @@ final class ARSessionManager: NSObject {
     @ObservationIgnored private var coachTask: Task<Void, Never>?
     private static let coachInterval: Duration = .milliseconds(330)  // ~3 Hz
 
+    /// Active-scan-time tracking — wall time since `start()` minus any
+    /// time spent in `pauseForReview()`. So the save-sheet duration
+    /// reads true "you scanned for 2:34", not "you opened the app 5
+    /// minutes ago and walked away". Reset on `stop()` / fresh `start()`.
+    @ObservationIgnored private var scanStartedAt: Date?
+    @ObservationIgnored private var pausedAccumulated: TimeInterval = 0
+    @ObservationIgnored private var pauseStartedAt: Date?
+
+    /// Wall time the scan has been actively capturing (paused intervals
+    /// excluded). Zero before the first `start()` of a session.
+    var activeScanDuration: TimeInterval {
+        guard let start = scanStartedAt else { return 0 }
+        var d = Date().timeIntervalSince(start) - pausedAccumulated
+        if let p = pauseStartedAt { d -= Date().timeIntervalSince(p) }
+        return max(0, d)
+    }
+
     /// The configuration last run, kept so we can resume after a review
     /// pause without resetting tracking or dropping the captured mesh.
     @ObservationIgnored private var currentConfig: ARConfiguration?
@@ -113,6 +130,9 @@ final class ARSessionManager: NSObject {
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
         currentConfig = config
         isRunning = true
+        scanStartedAt = Date()
+        pausedAccumulated = 0
+        pauseStartedAt = nil
         Log.ar.info("ARSession started · \(self.direction.rawValue, privacy: .public)")
 
         // No welcome message — ARCoachingOverlayView (mounted by the
@@ -168,6 +188,9 @@ final class ARSessionManager: NSObject {
         stats.reset()
         meshCache.reset()
         didShowReady = false
+        scanStartedAt = nil
+        pausedAccumulated = 0
+        pauseStartedAt = nil
         Log.ar.info("ARSession paused")
     }
 
@@ -182,6 +205,7 @@ final class ARSessionManager: NSObject {
         coachTask = nil
         session.pause()
         isRunning = false
+        if pauseStartedAt == nil { pauseStartedAt = Date() }
         Log.ar.info("ARSession paused for review")
     }
 
@@ -191,6 +215,10 @@ final class ARSessionManager: NSObject {
         guard !isRunning, let config = currentConfig else { return }
         session.run(config, options: [])
         isRunning = true
+        if let p = pauseStartedAt {
+            pausedAccumulated += Date().timeIntervalSince(p)
+            pauseStartedAt = nil
+        }
         startSummaryLoop()
         startCoachLoop()
         Log.ar.info("ARSession resumed from review")

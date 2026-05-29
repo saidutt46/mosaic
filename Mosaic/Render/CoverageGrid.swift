@@ -32,6 +32,19 @@ struct CoverageSnapshot: Sendable {
     let points: [SIMD4<Float>]
     var isEmpty: Bool { points.isEmpty }
     var count: Int { points.count }
+
+    /// How many voxels cleared the well-covered bar — matches the live
+    /// coach's default threshold (`CaptureCoach.Tuning.wellCoveredQuality`).
+    /// Hardcoded here so the save sheet doesn't need a Coach instance.
+    func wellCoveredCount(above threshold: Float = 0.5) -> Int {
+        points.lazy.filter { $0.w >= threshold }.count
+    }
+
+    /// wellCovered / total — the same fraction the live capsule shows.
+    func wellCoveredFraction(above threshold: Float = 0.5) -> Float {
+        guard !points.isEmpty else { return 0 }
+        return Float(wellCoveredCount(above: threshold)) / Float(points.count)
+    }
 }
 
 final class CoverageGrid {

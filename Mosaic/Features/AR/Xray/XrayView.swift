@@ -19,6 +19,7 @@
 //
 
 import SwiftUI
+import simd
 import os
 
 struct XrayView: View {
@@ -154,6 +155,11 @@ struct XrayView: View {
         .sheet(isPresented: $showingSaveSheet) {
             SaveScanSheet(
                 stats: pendingSave?.stats ?? (anchors: 0, faces: 0, vertices: 0),
+                extent: pendingSave?.extent,
+                coverage: pendingSave?.coverage,
+                duration: pendingSave?.duration ?? 0,
+                classCounts: pendingSave?.classCounts ?? [:],
+                palette: pendingSave?.palette ?? MeshOverlayPass.defaultPalette,
                 isSaving: isSaving,
                 onSave: performSave,
                 onClose: handleCloseSession,
@@ -232,6 +238,43 @@ struct XrayView: View {
         }
     }
 
+    // MARK: - Snapshot derivations (save-sheet stats)
+
+    /// World-axis-aligned extent (metres) of every transformed vertex in
+    /// the snapshot. Nil when the snapshot has no vertices to measure.
+    /// "Extent" not "room size" — outdoor scans are valid too.
+    private static func scanExtent(of snapshot: [MeshAnchorBuffers]) -> SIMD3<Float>? {
+        var minP = SIMD3<Float>(repeating: .greatestFiniteMagnitude)
+        var maxP = SIMD3<Float>(repeating: -.greatestFiniteMagnitude)
+        var any = false
+        for buffers in snapshot {
+            let verts = buffers.vertexBuffer.contents().assumingMemoryBound(to: SIMD3<Float>.self)
+            let transform = buffers.transform
+            for v in 0..<buffers.vertexCount {
+                let local = verts[v]
+                let w = transform * SIMD4<Float>(local, 1)
+                let p = SIMD3<Float>(w.x, w.y, w.z)
+                minP = simd_min(minP, p)
+                maxP = simd_max(maxP, p)
+                any = true
+            }
+        }
+        return any ? (maxP - minP) : nil
+    }
+
+    /// Per-class face counts keyed by `ARMeshClassification` raw value.
+    private static func classCounts(of snapshot: [MeshAnchorBuffers]) -> [UInt8: Int] {
+        var counts: [UInt8: Int] = [:]
+        for buffers in snapshot {
+            guard let cls = buffers.classificationBuffer?
+                .contents().assumingMemoryBound(to: UInt8.self) else { continue }
+            for f in 0..<buffers.faceCount {
+                counts[cls[f], default: 0] += 1
+            }
+        }
+        return counts
+    }
+
     // MARK: - Save handling
 
     /// Snapshot taken at the moment of the Save tap. Held while we wait
@@ -243,6 +286,13 @@ struct XrayView: View {
         /// Coverage voxel snapshot — nil/empty when coverage/coach wasn't
         /// used this session; in that case no `coverage.ply` is written.
         let coverage: CoverageSnapshot?
+        /// World-axis-aligned scan extent (metres) from snapshot vertices.
+        /// Nil when the snapshot has nothing to measure.
+        let extent: SIMD3<Float>?
+        /// Per-face counts keyed by `ARMeshClassification` raw value.
+        let classCounts: [UInt8: Int]
+        /// Active capture wall-time (paused intervals excluded).
+        let duration: TimeInterval
     }
 
     /// Done — snapshot the scan and request a composited frame; the
@@ -262,7 +312,10 @@ struct XrayView: View {
                     faces: cache.totalFaceCount,
                     vertices: cache.totalVertexCount),
             palette: classificationStyles.palette,
-            coverage: coverage.isEmpty ? nil : coverage
+            coverage: coverage.isEmpty ? nil : coverage,
+            extent: Self.scanExtent(of: snapshot),
+            classCounts: Self.classCounts(of: snapshot),
+            duration: sessionManager.activeScanDuration
         )
         captureTrigger &+= 1
     }
